@@ -34,9 +34,30 @@ describe('FeelScalaProvider', () => {
     expect(provider.unaryTest('  ', 42)).toBe(true);
   });
 
-  it('fails to initialize when bundle is not available', async () => {
+  it('successfully initializes when bundle is available', async () => {
     const provider = new FeelScalaProvider();
-    await expect(provider.initialize()).rejects.toThrow(/not available/);
+    await provider.initialize();
+    // Basic smoke test
+    const result = provider.evaluate('1 + 2');
+    expect(result).toBe(3);
+  });
+
+  it('evaluates expressions after initialization', async () => {
+    const provider = new FeelScalaProvider();
+    await provider.initialize();
+    expect(provider.evaluate('"hello"')).toBe('hello');
+    expect(provider.evaluate('true')).toBe(true);
+    expect(provider.evaluate('if 10 > 5 then "yes" else "no"')).toBe('yes');
+  });
+
+  it('evaluates unary tests after initialization', async () => {
+    const provider = new FeelScalaProvider();
+    await provider.initialize();
+    expect(provider.unaryTest('> 5', 10)).toBe(true);
+    expect(provider.unaryTest('> 5', 3)).toBe(false);
+    expect(provider.unaryTest('"A"', 'A')).toBe(true);
+    expect(provider.unaryTest('[1..10]', 5)).toBe(true);
+    expect(provider.unaryTest('[1..10]', 15)).toBe(false);
   });
 });
 
@@ -49,11 +70,11 @@ describe('FEEL Provider Registry', () => {
       expect(feelin.available).toBe(true);
     });
 
-    it('lists feel-scala as not available (no bundle)', () => {
+    it('lists feel-scala as available (bundle present)', () => {
       const providers = getAvailableProviders();
       const scala = providers.find((p) => p.name === 'feel-scala');
       expect(scala).toBeDefined();
-      expect(scala.available).toBe(false);
+      expect(scala.available).toBe(true);
     });
   });
 
@@ -68,8 +89,10 @@ describe('FEEL Provider Registry', () => {
       await expect(getProvider('nonexistent')).rejects.toThrow(/[Uu]nknown/);
     });
 
-    it('throws for feel-scala when bundle is unavailable', async () => {
-      await expect(getProvider('feel-scala')).rejects.toThrow(/not available/);
+    it('returns a FeelScalaProvider for "feel-scala"', async () => {
+      const provider = await getProvider('feel-scala');
+      expect(provider).toBeInstanceOf(FeelScalaProvider);
+      expect(provider.name).toBe('feel-scala');
     });
 
     it('caches provider instances', async () => {
@@ -90,11 +113,10 @@ describe('FEEL Provider Registry', () => {
       expect(provider.name).toBe('feelin');
     });
 
-    it('falls back to feelin when feel-scala is not available', async () => {
+    it('returns feel-scala provider when selected', async () => {
       setCurrentProvider('feel-scala');
       const provider = await getCurrentProvider();
-      // Falls back since feel-scala bundle isn't available
-      expect(provider.name).toBe('feelin');
+      expect(provider.name).toBe('feel-scala');
       // Reset
       setCurrentProvider('feelin');
     });

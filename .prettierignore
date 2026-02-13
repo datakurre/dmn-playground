@@ -2,3 +2,4 @@ dist/
 node_modules/
 TODO-feel-scala/
 coverage/
+src/engine/feel/feel-scala-bundle.js

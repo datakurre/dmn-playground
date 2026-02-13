@@ -4,9 +4,10 @@
  * feel-scala is the production FEEL engine used by Operaton/Camunda 7.
  * It provides maximum fidelity for FEEL expression evaluation.
  *
- * This provider requires a Scala.js-compiled bundle of feel-scala to be
- * available. Until the Scala.js transpilation is complete, this provider
- * will throw an error on construction if the bundle is not found.
+ * The Scala.js bundle is compiled from the feel-scala Scala source using
+ * `sbt fastOptJS` and placed at `./feel-scala-bundle.js`. The bundle
+ * exports `FeelEngineBuilder` which is used to create a `FeelEngineApi`
+ * instance configured for JS interop (using `forJS()`).
  *
  * @see https://github.com/camunda/feel-scala
  */
@@ -14,10 +15,10 @@
 import { FeelProvider } from './provider.js';
 
 /**
- * Dynamically loaded feel-scala engine instance.
+ * Loaded FeelEngineApi instance (built via FeelEngineBuilder.forJS().build()).
  * @type {Object|null}
  */
-let feelScalaEngine = null;
+let feelScalaApi = null;
 
 /**
  * Whether we've attempted to load the feel-scala bundle.
@@ -26,26 +27,24 @@ let feelScalaEngine = null;
 let loadAttempted = false;
 
 /**
- * Try to load the feel-scala Scala.js bundle.
+ * Try to load the feel-scala Scala.js bundle and create the engine.
  * Returns true if successfully loaded, false otherwise.
  *
  * @returns {Promise<boolean>}
  */
 async function loadFeelScalaBundle() {
   if (loadAttempted) {
-    return feelScalaEngine !== null;
+    return feelScalaApi !== null;
   }
   loadAttempted = true;
 
   try {
-    // The feel-scala Scala.js bundle is expected to expose a global or module
-    // Once the Scala.js transpilation (TODO) is complete, this import path
-    // will point to the compiled JS bundle.
     const module = await import(/* webpackIgnore: true */ './feel-scala-bundle.js');
-    feelScalaEngine = module.default || module;
+    const { FeelEngineBuilder } = module;
+    feelScalaApi = FeelEngineBuilder.forJS().build();
     return true;
   } catch {
-    // Bundle not available yet — expected until Scala.js transpilation is done
+    // Bundle not available — fall back to feelin
     return false;
   }
 }
@@ -56,7 +55,36 @@ async function loadFeelScalaBundle() {
  * @returns {boolean}
  */
 export function isFeelScalaAvailable() {
-  return feelScalaEngine !== null;
+  return feelScalaApi !== null;
+}
+
+/**
+ * Extract the result value from a feel-scala EvaluationResult object.
+ *
+ * The Scala.js compilation mangles field names, so we locate fields by
+ * suffix pattern matching (e.g. `__f_result`, `__f_isSuccess`).
+ *
+ * @param {Object} evalResult - Raw EvaluationResult from feel-scala API
+ * @returns {{ result: *, isSuccess: boolean, failure: string|null }}
+ */
+function extractResult(evalResult) {
+  const entries = Object.entries(evalResult);
+
+  const resultEntry = entries.find(([k]) => k.endsWith('__f_result'));
+  const successEntry = entries.find(([k]) => k.endsWith('__f_isSuccess'));
+  const failureEntry = entries.find(([k]) => k.endsWith('__f_failure'));
+
+  const isSuccess = successEntry ? successEntry[1] : false;
+  const result = resultEntry ? resultEntry[1] : null;
+
+  let failure = null;
+  if (!isSuccess && failureEntry) {
+    const failObj = failureEntry[1];
+    const msgEntry = Object.entries(failObj).find(([k]) => k.endsWith('__f_message'));
+    failure = msgEntry ? msgEntry[1] : String(failObj);
+  }
+
+  return { result, isSuccess, failure };
 }
 
 export class FeelScalaProvider extends FeelProvider {
@@ -76,9 +104,7 @@ export class FeelScalaProvider extends FeelProvider {
     const loaded = await loadFeelScalaBundle();
     if (!loaded) {
       throw new Error(
-        'feel-scala Scala.js bundle is not available. ' +
-          'The Scala.js transpilation must be completed first. ' +
-          'Use FeelinProvider as a fallback.',
+        'feel-scala Scala.js bundle is not available. ' + 'Use FeelinProvider as a fallback.',
       );
     }
     this._ready = true;
@@ -90,15 +116,23 @@ export class FeelScalaProvider extends FeelProvider {
    * @param {string} expression - FEEL expression
    * @param {Object} context - Variable bindings
    * @returns {*} The evaluated result value
-   * @throws {Error} If the provider is not initialized
+   * @throws {Error} If the provider is not initialized or evaluation fails
    */
   evaluate(expression, context = {}) {
     this._ensureReady();
 
-    // feel-scala API: engine.evalExpression(expression, context)
-    // The exact API shape depends on the Scala.js export.
-    const result = feelScalaEngine.evalExpression(expression, context);
-    return unwrapScalaResult(result);
+    const hasContext = Object.keys(context).length > 0;
+    const evalResult = hasContext
+      ? feelScalaApi.evalExpressionWithContext(expression, context)
+      : feelScalaApi.evaluateExpression(expression);
+
+    const { result, isSuccess, failure } = extractResult(evalResult);
+
+    if (!isSuccess) {
+      throw new Error(`feel-scala evaluation failed: ${failure}`);
+    }
+
+    return result;
   }
 
   /**
@@ -119,15 +153,15 @@ export class FeelScalaProvider extends FeelProvider {
 
     this._ensureReady();
 
-    // feel-scala API: engine.evalUnaryTests(expression, context)
-    // The input value is passed as the special variable in the context.
-    const testContext = {
-      ...context,
-      [FeelScalaProvider.INPUT_VARIABLE_KEY]: inputValue,
-    };
+    const hasContext = Object.keys(context).length > 0;
+    const evalResult = hasContext
+      ? feelScalaApi.evalUnaryTestsWithContext(trimmed, inputValue, context)
+      : feelScalaApi.evaluateUnaryTests(trimmed, inputValue);
 
-    const result = feelScalaEngine.evalUnaryTests(trimmed, testContext);
-    return unwrapScalaResult(result) === true;
+    const { result, isSuccess } = extractResult(evalResult);
+
+    // A successful unary test returns true/false; a failed one returns null
+    return isSuccess && result === true;
   }
 
   /**
@@ -138,42 +172,4 @@ export class FeelScalaProvider extends FeelProvider {
       throw new Error('FeelScalaProvider is not initialized. Call initialize() first.');
     }
   }
-}
-
-/**
- * The context key used by feel-scala for the input value in unary tests.
- * In Operaton, this is the special variable name for the "?" input.
- */
-FeelScalaProvider.INPUT_VARIABLE_KEY = '?';
-
-/**
- * Unwrap a Scala.js result value to a plain JS value.
- *
- * feel-scala may return Scala wrapper types (Option, List, etc.)
- * that need to be converted to native JS equivalents.
- *
- * @param {*} result - Raw result from feel-scala
- * @returns {*} Unwrapped JS value
- */
-function unwrapScalaResult(result) {
-  if (result === null || result === undefined) {
-    return null;
-  }
-
-  // Scala Option → unwrap Some(x) or None → null
-  if (typeof result.isEmpty === 'function') {
-    return result.isEmpty() ? null : unwrapScalaResult(result.get());
-  }
-
-  // Scala List/Seq → JS array
-  if (typeof result.toJSArray === 'function') {
-    return result.toJSArray().map(unwrapScalaResult);
-  }
-
-  // Scala Map → JS object
-  if (typeof result.toJSObject === 'function') {
-    return result.toJSObject();
-  }
-
-  return result;
 }

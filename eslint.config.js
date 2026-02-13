@@ -26,6 +26,6 @@ export default [
     },
   },
   {
-    ignores: ['dist/', 'node_modules/', 'TODO-feel-scala/'],
+    ignores: ['dist/', 'node_modules/', 'TODO-feel-scala/', 'src/engine/feel/feel-scala-bundle.js'],
   },
 ];

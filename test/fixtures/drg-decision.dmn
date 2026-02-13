@@ -5,7 +5,7 @@
              namespace="http://camunda.org/schema/1.0/dmn">
 
   <!-- First decision: determine risk level -->
-  <decision id="decision_risk" name="Risk Level">
+  <decision id="decision_risk" name="riskLevel">
     <decisionTable id="dt_risk" hitPolicy="UNIQUE">
       <input id="input_income" label="Income">
         <inputExpression id="ie_income" typeRef="double">
@@ -28,7 +28,7 @@
     </decisionTable>
   </decision>
 
-  <!-- Second decision: depends on Risk Level -->
+  <!-- Second decision: depends on riskLevel -->
   <decision id="decision_rate" name="Interest Rate">
     <informationRequirement id="ir_risk">
       <requiredDecision href="#decision_risk" />
@@ -36,7 +36,7 @@
     <decisionTable id="dt_rate" hitPolicy="UNIQUE">
       <input id="input_risk_level" label="Risk Level">
         <inputExpression id="ie_risk_level" typeRef="string">
-          <text>Risk Level</text>
+          <text>riskLevel</text>
         </inputExpression>
       </input>
       <output id="output_rate" label="Rate" name="rate" typeRef="double" />
