@@ -103,8 +103,8 @@ describe('FEEL Provider Registry', () => {
   });
 
   describe('getCurrentProvider() / setCurrentProvider()', () => {
-    it('defaults to feelin', () => {
-      expect(getCurrentProviderName()).toBe('feelin');
+    it('defaults to feel-scala', () => {
+      expect(getCurrentProviderName()).toBe('feel-scala');
     });
 
     it('returns feelin provider by default', async () => {

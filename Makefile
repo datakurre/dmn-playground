@@ -1,10 +1,13 @@
-.PHONY: dev build preview test test-watch lint format format-check check
+.PHONY: dev build preview test test-watch lint format format-check check build-feel-scala
 
 dev:
 	npm run dev
 
 build:
 	npm run build
+
+build-feel-scala:
+	$(MAKE) -C feel-scala
 
 preview:
 	npm run preview

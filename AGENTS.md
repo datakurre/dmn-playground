@@ -22,7 +22,7 @@ FEEL expressions; the JS DMN engine mirrors Operaton's evaluation logic.
 
 ## Key Technologies
 
-- **JavaScript/TypeScript** — primary language
+- **JavaScript** — primary language (ES Modules)
 - **Node.js 22+** — development runtime
 - **Vite** — build tool and dev server
 - **Vitest** — unit testing
@@ -127,12 +127,18 @@ npm run dev
 # Run tests
 npm test
 
+# Run tests with coverage
+npm run test:coverage
+
 # Lint & format
 npm run lint
 npm run format
+
+# Full check (format + lint + test)
+make check
 ```
 
-## File Structure (Planned)
+## File Structure
 
 ```
 dmn-simulator/
@@ -141,29 +147,42 @@ dmn-simulator/
 │   │   ├── evaluate.js   # Main evaluation entry point
 │   │   ├── hit-policy.js # Hit-policy implementations
 │   │   ├── drg.js        # Decision Requirements Graph resolver
+│   │   ├── batch.js      # Batch evaluation (CSV/JSON)
+│   │   ├── compare.js    # Model comparison / structural diff
 │   │   ├── types.js      # Type coercion & validation
 │   │   └── feel/         # Pluggable FEEL provider
 │   │       ├── provider.js       # FeelProvider interface
-│   │       ├── feelin.js         # feelin adapter (default)
-│   │       └── feel-scala.js     # feel-scala Scala.js adapter
+│   │       ├── feelin.js         # feelin adapter
+│   │       ├── feel-scala.js     # feel-scala Scala.js adapter
+│   │       ├── registry.js       # Runtime provider selection
+│   │       └── index.js          # Re-exports
 │   ├── parser/           # DMN XML → internal model
-│   │   └── parse.js      # Uses dmn-moddle
+│   │   └── parse.js      # Uses dmn-moddle + camunda-dmn-moddle
 │   ├── ui/               # Browser UI components
-│   │   ├── App.js        # Main application
-│   │   ├── Viewer.js     # dmn-js integration
-│   │   └── InputForm.js  # Dynamic input form
-│   └── index.js          # Entry point
+│   │   ├── App.js        # Main application wiring
+│   │   ├── Viewer.js     # dmn-js viewer/modeler integration
+│   │   ├── InputForm.js  # Dynamic input form builder
+│   │   ├── url-state.js  # URL state encoding/decoding
+│   │   ├── sample-dmn.js # Embedded sample DMN
+│   │   └── styles.css    # UI styles (dark/light theme)
+│   └── index.js          # Entry point & public API
 ├── test/                 # Vitest test suites
-│   ├── engine/
-│   ├── parser/
-│   └── fixtures/         # Sample DMN files
-├── public/               # Static assets
+│   ├── engine/           # Engine unit tests
+│   ├── parser/           # Parser tests
+│   ├── ui/               # UI utility tests
+│   └── fixtures/         # Sample DMN files & golden files
+├── feel-scala/           # Scala.js build for feel-scala backend
+│   ├── Makefile          # Download, patch, compile workflow
+│   ├── build.sbt         # Scala.js build config
+│   └── scalajs.patch     # Patches for Scala.js compatibility
+├── public/               # Static assets & PWA manifest
+├── .github/workflows/    # CI & GitHub Pages deployment
 ├── devenv.nix            # Nix development environment
-├── devenv.yaml           # devenv inputs
 ├── package.json
 ├── vite.config.js
+├── vitest.config.js
 ├── AGENTS.md             # ← this file
-└── TODO.md               # Task tracking
+└── README.md             # Project documentation
 ```
 
 ## Code Style

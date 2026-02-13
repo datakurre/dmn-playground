@@ -1,0 +1,4 @@
+# Downloaded source tree (re-created by `make`)
+source/
+# Build stamps
+.stamps/

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2025 Operaton contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 /**
  * App.js — Main application entry point for the DMN Simulator UI.
  *
@@ -7,6 +22,13 @@
 import { parseDmnXml } from '../parser/parse.js';
 import { evaluateDecision } from '../engine/evaluate.js';
 import { evaluateBatch, parseCSV } from '../engine/batch.js';
+import { compareModels } from '../engine/compare.js';
+import {
+  getAvailableProviders,
+  getProvider,
+  setCurrentProvider,
+  getCurrentProviderName,
+} from '../engine/feel/registry.js';
 import { createViewer } from './Viewer.js';
 import { buildInputForm, buildOverrideForm } from './InputForm.js';
 import { encodeState, decodeState } from './url-state.js';
@@ -32,6 +54,7 @@ const btnImport = document.getElementById('btn-import');
 const btnTheme = document.getElementById('btn-theme');
 const btnShare = document.getElementById('btn-share');
 const btnBatch = document.getElementById('btn-batch');
+const btnEditToggle = document.getElementById('btn-edit-toggle');
 const decisionSelect = document.getElementById('decision-select');
 const inputForm = document.getElementById('input-form');
 const overrideForm = document.getElementById('override-form');
@@ -45,6 +68,17 @@ const batchSummary = document.getElementById('batch-summary');
 const batchResults = document.getElementById('batch-results');
 const btnBatchClose = document.getElementById('btn-batch-close');
 const btnBatchDownload = document.getElementById('btn-batch-download');
+const batchEditorPanel = document.getElementById('batch-editor-panel');
+const batchEditor = document.getElementById('batch-editor');
+const btnBatchRun = document.getElementById('btn-batch-run');
+const btnBatchClear = document.getElementById('btn-batch-clear');
+const feelProviderSelect = document.getElementById('feel-provider-select');
+const btnCompare = document.getElementById('btn-compare');
+const compareInput = document.getElementById('compare-input');
+const compareModal = document.getElementById('compare-modal');
+const compareSummary = document.getElementById('compare-summary');
+const compareResults = document.getElementById('compare-results');
+const btnCompareClose = document.getElementById('btn-compare-close');
 
 // ── Initialize Viewer ───────────────────────────────────────────────
 
@@ -74,6 +108,65 @@ btnTheme.addEventListener('click', () => {
     localStorage.setItem('dmn-sim-theme', 'dark');
   }
 });
+
+// ── FEEL Provider Selection ──────────────────────────────────────────
+
+function initFeelProviderSelect() {
+  const providers = getAvailableProviders();
+  feelProviderSelect.innerHTML = '';
+  for (const p of providers) {
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    opt.textContent = p.label;
+    opt.title = p.description;
+    if (!p.available && p.name !== 'feelin') {
+      opt.textContent += ' (loading…)';
+    }
+    feelProviderSelect.appendChild(opt);
+  }
+  feelProviderSelect.value = getCurrentProviderName();
+
+  // Restore saved preference
+  const saved = localStorage.getItem('dmn-sim-feel-provider');
+  if (saved) {
+    setCurrentProvider(saved);
+    feelProviderSelect.value = saved;
+  }
+}
+
+initFeelProviderSelect();
+
+feelProviderSelect.addEventListener('change', async () => {
+  const name = feelProviderSelect.value;
+  try {
+    // Pre-initialize the provider to verify it works
+    const provider = await getCurrentProviderForEval(name);
+    if (provider) {
+      setCurrentProvider(name);
+      localStorage.setItem('dmn-sim-feel-provider', name);
+      showToast(`Switched to ${name}`);
+      // Update option text (remove "loading…" if present)
+      const opt = feelProviderSelect.querySelector(`option[value="${name}"]`);
+      const info = getAvailableProviders().find((p) => p.name === name);
+      if (opt && info) {
+        opt.textContent = info.label;
+      }
+    }
+  } catch {
+    showError(`Failed to load ${name}. Falling back to feelin.`);
+    setCurrentProvider('feelin');
+    feelProviderSelect.value = 'feelin';
+    localStorage.setItem('dmn-sim-feel-provider', 'feelin');
+  }
+});
+
+/**
+ * Get the FEEL provider instance for evaluation.
+ * Optionally specify a name to try; otherwise uses the current selection.
+ */
+async function getCurrentProviderForEval(name) {
+  return getProvider(name || getCurrentProviderName());
+}
 
 // ── Event Handlers ──────────────────────────────────────────────────
 
@@ -169,6 +262,202 @@ batchModal.addEventListener('click', (e) => {
   }
 });
 
+// ── Edit Mode Toggle ────────────────────────────────────────────
+
+btnEditToggle.addEventListener('click', async () => {
+  const newMode = !viewer.isEditMode();
+  await viewer.setEditMode(newMode);
+
+  if (newMode) {
+    btnEditToggle.textContent = '👁 View';
+    btnEditToggle.title = 'Switch to view mode';
+  } else {
+    btnEditToggle.textContent = '✏️ Edit';
+    btnEditToggle.title = 'Switch to edit mode';
+    // After leaving edit mode, re-parse the (possibly edited) XML
+    const xml = await viewer.saveXml();
+    if (xml && xml !== currentXml) {
+      currentXml = xml;
+      currentModel = await parseDmnXml(xml);
+      // Re-populate the decision selector
+      const selectedId = decisionSelect.value;
+      decisionSelect.innerHTML = '<option value="">— Select decision —</option>';
+      for (const [id, decision] of currentModel.decisions) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = decision.name || id;
+        decisionSelect.appendChild(opt);
+      }
+      // Restore selection if still valid
+      if (currentModel.decisions.has(selectedId)) {
+        decisionSelect.value = selectedId;
+        const decision = currentModel.decisions.get(selectedId);
+        getInputValues = buildInputForm(inputForm, decision);
+        getOverrideValues = buildOverrideForm(overrideForm, currentModel, selectedId);
+      }
+    }
+  }
+});
+
+// ── Batch Editor (inline) ───────────────────────────────────────
+
+btnBatchRun.addEventListener('click', () => {
+  const text = batchEditor.value.trim();
+  if (!text) {
+    showError('Batch editor is empty');
+    return;
+  }
+
+  try {
+    let rows;
+    // Try JSON first, then fall back to CSV
+    if (text.startsWith('[')) {
+      rows = JSON.parse(text);
+      if (!Array.isArray(rows)) {
+        throw new Error('JSON must be an array of input objects');
+      }
+    } else {
+      rows = parseCSV(text);
+      if (rows.length === 0) {
+        throw new Error('No data rows found in CSV');
+      }
+    }
+    runBatchEvaluation(rows);
+  } catch (err) {
+    showError(`Batch input error: ${err.message}`);
+  }
+});
+
+btnBatchClear.addEventListener('click', () => {
+  batchEditor.value = '';
+});
+
+// ── Compare Mode ────────────────────────────────────────────────
+
+btnCompare.addEventListener('click', () => compareInput.click());
+
+compareInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    try {
+      const xml = await file.text();
+      const otherModel = await parseDmnXml(xml);
+      showComparison(currentModel, otherModel);
+    } catch (err) {
+      showError(`Failed to compare: ${err.message}`);
+    }
+  }
+  compareInput.value = '';
+});
+
+btnCompareClose.addEventListener('click', () => {
+  compareModal.classList.add('hidden');
+});
+
+compareModal.addEventListener('click', (e) => {
+  if (e.target === compareModal) {
+    compareModal.classList.add('hidden');
+  }
+});
+
+function showComparison(leftModel, rightModel) {
+  const diff = compareModels(leftModel, rightModel);
+
+  // Summary
+  const parts = [];
+  if (diff.summary.modified > 0) parts.push(`${diff.summary.modified} modified`);
+  if (diff.summary.added > 0) parts.push(`${diff.summary.added} added`);
+  if (diff.summary.removed > 0) parts.push(`${diff.summary.removed} removed`);
+  if (diff.summary.unchanged > 0) parts.push(`${diff.summary.unchanged} unchanged`);
+  compareSummary.textContent = `${diff.decisions.length} decisions compared: ${parts.join(', ')}`;
+
+  // Build comparison HTML
+  let html = '';
+
+  for (const dec of diff.decisions) {
+    const statusClass = `compare-${dec.status}`;
+    const statusIcon =
+      dec.status === 'added'
+        ? '➕'
+        : dec.status === 'removed'
+          ? '➖'
+          : dec.status === 'modified'
+            ? '✏️'
+            : '✔️';
+
+    html += `<div class="compare-decision ${statusClass}">`;
+    html += `<h4>${statusIcon} ${escapeHtml(dec.name || dec.id)} <span class="compare-status">${dec.status}</span></h4>`;
+
+    // Field-level changes
+    if (dec.changes.length > 0) {
+      html += '<div class="compare-changes">';
+      for (const change of dec.changes) {
+        if (change.field === 'inputs' || change.field === 'outputs') {
+          // Array-style changes stored in .left
+          for (const sub of change.left) {
+            html += `<div class="compare-change">`;
+            html += `<span class="compare-field">${escapeHtml(change.field)}${escapeHtml(sub.field)}</span> `;
+            if (sub.left !== null) {
+              html += `<span class="compare-old">${escapeHtml(String(sub.left))}</span> → `;
+            }
+            if (sub.right !== null) {
+              html += `<span class="compare-new">${escapeHtml(String(sub.right))}</span>`;
+            }
+            html += '</div>';
+          }
+        } else {
+          html += `<div class="compare-change">`;
+          html += `<span class="compare-field">${escapeHtml(change.field)}</span>: `;
+          html += `<span class="compare-old">${escapeHtml(String(change.left))}</span>`;
+          html += ` → <span class="compare-new">${escapeHtml(String(change.right))}</span>`;
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+    }
+
+    // Rule diffs
+    if (dec.ruleDiffs && dec.ruleDiffs.some((r) => r.status !== 'unchanged')) {
+      html +=
+        '<table class="compare-rules"><thead><tr><th>#</th><th>Status</th><th>Left</th><th>Right</th></tr></thead><tbody>';
+
+      for (const rule of dec.ruleDiffs) {
+        const ruleClass = `compare-rule-${rule.status}`;
+        const ruleNum =
+          rule.leftIndex !== null && rule.leftIndex !== undefined
+            ? rule.leftIndex + 1
+            : rule.rightIndex !== null && rule.rightIndex !== undefined
+              ? rule.rightIndex + 1
+              : '?';
+        const leftText = formatRuleEntries(rule.leftInputEntries, rule.leftOutputEntries);
+        const rightText = formatRuleEntries(rule.rightInputEntries, rule.rightOutputEntries);
+
+        html += `<tr class="${ruleClass}">`;
+        html += `<td>${ruleNum}</td>`;
+        html += `<td>${rule.status}</td>`;
+        html += `<td>${escapeHtml(leftText)}</td>`;
+        html += `<td>${escapeHtml(rightText)}</td>`;
+        html += '</tr>';
+      }
+
+      html += '</tbody></table>';
+    }
+
+    html += '</div>';
+  }
+
+  compareResults.innerHTML = html;
+  compareModal.classList.remove('hidden');
+}
+
+function formatRuleEntries(inputs, outputs) {
+  if (!inputs && !outputs) return '—';
+  const parts = [];
+  if (inputs) parts.push(`IN: ${inputs.join(', ')}`);
+  if (outputs) parts.push(`OUT: ${outputs.join(', ')}`);
+  return parts.join(' | ');
+}
+
 decisionSelect.addEventListener('change', () => {
   const decisionId = decisionSelect.value;
   if (decisionId && currentModel) {
@@ -238,6 +527,16 @@ async function loadDmn(xml) {
     btnExport.disabled = false;
     btnShare.disabled = false;
     btnBatch.disabled = false;
+    btnCompare.disabled = false;
+    btnEditToggle.disabled = false;
+    batchEditorPanel.classList.remove('hidden');
+
+    // Reset edit mode button state
+    if (viewer.isEditMode()) {
+      await viewer.setEditMode(false);
+      btnEditToggle.textContent = '✏️ Edit';
+      btnEditToggle.title = 'Switch to edit mode';
+    }
 
     // Auto-select if only one decision
     if (currentModel.decisions.size === 1) {
@@ -256,11 +555,24 @@ async function loadDmn(xml) {
   }
 }
 
-function runEvaluation() {
+async function runEvaluation() {
   const decisionId = decisionSelect.value;
   if (!decisionId || !currentModel) {
     showError('Please select a decision first');
     return;
+  }
+
+  // Switch to view mode if currently editing
+  if (viewer.isEditMode()) {
+    const xml = await viewer.saveXml();
+    if (xml && xml !== currentXml) {
+      currentXml = xml;
+      currentModel = await parseDmnXml(xml);
+    }
+    await viewer.setEditMode(false);
+    btnEditToggle.textContent = '✏️ Edit';
+    btnEditToggle.title = 'Switch to edit mode';
+    await viewer.load(currentXml);
   }
 
   const inputData = getInputValues();
@@ -271,6 +583,7 @@ function runEvaluation() {
     if (Object.keys(overrides).length > 0) {
       options.overrides = overrides;
     }
+    options.feelProvider = await getCurrentProviderForEval();
 
     const { result, trace, error } = evaluateDecision(currentModel, decisionId, inputData, options);
 
@@ -360,14 +673,20 @@ async function importTestData(json) {
 
 let lastBatchResults = null;
 
-function runBatchEvaluation(rows) {
+async function runBatchEvaluation(rows) {
   const decisionId = decisionSelect.value;
   if (!decisionId || !currentModel) {
     showError('Please select a decision first');
     return;
   }
 
-  const results = evaluateBatch(currentModel, decisionId, rows);
+  let feelProvider;
+  try {
+    feelProvider = await getCurrentProviderForEval();
+  } catch {
+    feelProvider = undefined;
+  }
+  const results = evaluateBatch(currentModel, decisionId, rows, { feelProvider });
   lastBatchResults = results;
 
   // Show results in modal

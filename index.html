@@ -25,7 +25,16 @@
         <select id="decision-select" disabled>
           <option value="">— Select decision —</option>
         </select>
+        <button id="btn-edit-toggle" title="Toggle view/edit mode" disabled>✏️ Edit</button>
         <span class="toolbar-spacer"></span>
+        <label class="feel-provider-label" title="FEEL expression engine">
+          FEEL:
+          <select id="feel-provider-select">
+            <option value="feel-scala">feel-scala (Scala.js)</option>
+            <option value="feelin">feelin (JS)</option>
+          </select>
+        </label>
+        <button id="btn-compare" title="Compare two DMN versions side-by-side" disabled>⚖️ Compare</button>
         <button id="btn-batch" title="Batch evaluate with CSV/JSON" disabled>📊 Batch</button>
         <button id="btn-share" title="Copy shareable URL" disabled>🔗 Share</button>
         <button id="btn-export" title="Export test data as JSON" disabled>💾 Export</button>
@@ -48,6 +57,15 @@
               <p class="hint">Load a DMN file to see inputs</p>
             </form>
             <div id="override-form"></div>
+            <div id="batch-editor-panel" class="hidden">
+              <h4 class="batch-editor-heading">Batch Input Editor</h4>
+              <p class="hint">Enter JSON array or CSV (with headers). One row per evaluation.</p>
+              <textarea id="batch-editor" rows="8" spellcheck="false" placeholder='[{"age": 25}, {"age": 30}]&#10;&#10;or CSV:&#10;age&#10;25&#10;30'></textarea>
+              <div class="batch-editor-actions">
+                <button id="btn-batch-run" title="Run batch evaluation">▶ Run Batch</button>
+                <button id="btn-batch-clear" title="Clear editor">🗑 Clear</button>
+              </div>
+            </div>
           </div>
 
           <div id="result-panel">
@@ -65,6 +83,21 @@
       <input type="file" id="file-input" accept=".dmn,.xml" hidden />
       <input type="file" id="import-input" accept=".json" hidden />
       <input type="file" id="batch-input" accept=".csv,.json" hidden />
+      <input type="file" id="compare-input" accept=".dmn,.xml" hidden />
+
+      <!-- Compare modal -->
+      <div id="compare-modal" class="modal hidden">
+        <div class="modal-content modal-wide">
+          <div class="modal-header">
+            <h3>DMN Version Comparison</h3>
+            <button id="btn-compare-close" class="modal-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="compare-summary" class="compare-summary"></div>
+            <div id="compare-results" class="compare-results"></div>
+          </div>
+        </div>
+      </div>
 
       <!-- Batch results modal -->
       <div id="batch-modal" class="modal hidden">

@@ -86,6 +86,25 @@ body {
   flex: 1;
 }
 
+.feel-provider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.feel-provider-label select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 #toolbar button,
 #toolbar select {
   padding: 6px 14px;
@@ -496,6 +515,210 @@ td.matched-rule {
   100% {
     opacity: 0;
   }
+}
+
+/* ── Edit Mode Toggle ────────────────────────────────────────────── */
+
+#btn-edit-toggle.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* ── Batch Editor ────────────────────────────────────────────────── */
+
+#batch-editor-panel {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+#batch-editor-panel.hidden {
+  display: none;
+}
+
+.batch-editor-heading {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+}
+
+#batch-editor {
+  width: 100%;
+  min-height: 80px;
+  max-height: 200px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.4;
+  tab-size: 2;
+}
+
+#batch-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.batch-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.batch-editor-actions button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.batch-editor-actions button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* ── Compare / Diff View ─────────────────────────────────────────── */
+
+.modal-wide {
+  max-width: 1000px;
+}
+
+.compare-summary {
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.compare-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compare-decision {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  background: var(--bg);
+}
+
+.compare-decision h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.compare-status {
+  font-size: 0.7rem;
+  font-weight: 400;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.compare-modified {
+  border-left: 3px solid var(--accent);
+}
+
+.compare-modified .compare-status {
+  background: var(--accent);
+  color: white;
+}
+
+.compare-added {
+  border-left: 3px solid var(--success);
+}
+
+.compare-added .compare-status {
+  background: var(--success);
+  color: white;
+}
+
+.compare-removed {
+  border-left: 3px solid var(--error);
+}
+
+.compare-removed .compare-status {
+  background: var(--error);
+  color: white;
+}
+
+.compare-unchanged {
+  border-left: 3px solid var(--border);
+  opacity: 0.7;
+}
+
+.compare-unchanged .compare-status {
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+.compare-changes {
+  margin: 6px 0;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+}
+
+.compare-change {
+  padding: 2px 0;
+}
+
+.compare-field {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.compare-old {
+  color: var(--error);
+  text-decoration: line-through;
+}
+
+.compare-new {
+  color: var(--success);
+}
+
+.compare-rules {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  margin-top: 8px;
+}
+
+.compare-rules th,
+.compare-rules td {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.compare-rules th {
+  background: var(--bg-panel);
+  font-weight: 600;
+}
+
+.compare-rule-added td {
+  background: rgba(22, 163, 74, 0.1);
+}
+
+.compare-rule-removed td {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.compare-rule-modified td {
+  background: rgba(37, 99, 235, 0.1);
 }
 
 /* ── Responsive Layout ───────────────────────────────────────────── */

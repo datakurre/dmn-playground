@@ -20,12 +20,20 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "lint": "eslint --max-warnings 0 src/ test/",
     "format": "prettier --write 'src/**/*.js' 'test/**/*.js'",
     "format:check": "prettier --check 'src/**/*.js' 'test/**/*.js'"
   },
-  "keywords": ["dmn", "decision", "simulator", "operaton", "camunda", "feel"],
+  "keywords": [
+    "dmn",
+    "decision",
+    "simulator",
+    "operaton",
+    "camunda",
+    "feel"
+  ],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
@@ -36,6 +44,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.3.0",

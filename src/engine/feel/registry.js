@@ -1,3 +1,18 @@
+/*
+ * Copyright 2025 Operaton contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 /**
  * FEEL Provider Registry — runtime selection of FEEL backend.
  *
@@ -34,7 +49,7 @@ const providerCache = new Map();
  * The currently selected provider name.
  * @type {ProviderName}
  */
-let currentProviderName = 'feelin';
+let currentProviderName = 'feel-scala';
 
 /**
  * Get information about all registered FEEL providers.
@@ -44,16 +59,16 @@ let currentProviderName = 'feelin';
 export function getAvailableProviders() {
   return [
     {
-      name: 'feelin',
-      label: 'feelin (JS)',
-      description: 'Lightweight FEEL interpreter written in JavaScript',
-      available: true,
-    },
-    {
       name: 'feel-scala',
       label: 'feel-scala (Scala.js)',
       description: 'Production FEEL engine from Operaton/Camunda 7 (compiled via Scala.js)',
       available: isFeelScalaAvailable(),
+    },
+    {
+      name: 'feelin',
+      label: 'feelin (JS)',
+      description: 'Lightweight FEEL interpreter written in JavaScript',
+      available: true,
     },
   ];
 }

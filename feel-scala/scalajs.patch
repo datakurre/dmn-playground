@@ -1,0 +1,1505 @@
+diff --git a/build.sbt b/build.sbt
+new file mode 100644
+index 00000000..05822002
+--- /dev/null
++++ b/build.sbt
+@@ -0,0 +1,23 @@
++scalaVersion := "2.13.16"
++
++enablePlugins(ScalaJSPlugin)
++
++name := "feel-engine"
++
++// Scala.js compatible dependencies only (%%% = cross-compiled for Scala.js)
++libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "2.8.0"
++libraryDependencies += "com.lihaoyi" %%% "fastparse" % "3.1.1"
++libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % "2.5.0"
++
++// Removed JVM-only dependencies (not used in source, incompatible with Scala.js):
++//   - org.slf4j % slf4j-api (JVM only)
++//   - com.fasterxml.uuid % java-uuid-generator (JVM only)
++//   - com.fasterxml.jackson.module %% jackson-module-scala (JVM only)
++//   - com.fasterxml.jackson.core % jackson-databind (JVM only)
++
++// Produce an ES module for easy integration with Vite/browser bundlers
++// ES2018 is needed for lookbehind regex in the FEEL parser
++scalaJSLinkerConfig ~= {
++  _.withModuleKind(ModuleKind.ESModule)
++   .withESFeatures(_.withESVersion(org.scalajs.linker.interface.ESVersion.ES2018))
++}
+diff --git a/project/build.properties b/project/build.properties
+new file mode 100644
+index 00000000..0b699c30
+--- /dev/null
++++ b/project/build.properties
+@@ -0,0 +1 @@
++sbt.version=1.10.2
+diff --git a/project/plugins.sbt b/project/plugins.sbt
+new file mode 100644
+index 00000000..e5b26995
+--- /dev/null
++++ b/project/plugins.sbt
+@@ -0,0 +1 @@
++addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.16.0")
+diff --git a/src/main/scala/org/camunda/feel/FeelEngine.scala b/src/main/scala/org/camunda/feel/FeelEngine.scala
+index 80877f3b..f321218b 100644
+--- a/src/main/scala/org/camunda/feel/FeelEngine.scala
++++ b/src/main/scala/org/camunda/feel/FeelEngine.scala
+@@ -37,10 +37,18 @@ import org.camunda.feel.syntaxtree.{Exp, ParsedExpression, ValError, ValFatalErr
+ import org.camunda.feel.valuemapper.ValueMapper.CompositeValueMapper
+ import org.camunda.feel.valuemapper.{CustomValueMapper, ValueMapper}
+ 
+-import scala.jdk.CollectionConverters.MapHasAsScala
++import scala.scalajs.js.annotation.{JSExport, JSExportAll, JSExportTopLevel}
+ import scala.util.Try
+ object FeelEngine {
+ 
++  @JSExport
++  def create(): FeelEngine = new FeelEngine(
++    functionProvider = FunctionProvider.EmptyFunctionProvider,
++    valueMapper = ValueMapper.defaultValueMapper,
++    configuration = Configuration(),
++    clock = FeelEngineClock.SystemClock
++  )
++
+   type EvalExpressionResult = Either[Failure, Any]
+   type EvalUnaryTestsResult = Either[Failure, Boolean]
+ 
+@@ -112,11 +120,13 @@ object FeelEngine {
+ 
+ }
+ 
++@JSExportAll
++@JSExportTopLevel("FeelEngine")
+ class FeelEngine(
+-    val functionProvider: FunctionProvider = FeelEngine.defaultFunctionProvider,
+-    val valueMapper: ValueMapper = FeelEngine.defaultValueMapper,
+-    val configuration: Configuration = FeelEngine.defaultConfiguration,
+-    val clock: FeelEngineClock = FeelEngine.defaultClock
++    val functionProvider: FunctionProvider,
++    val valueMapper: ValueMapper,
++    val configuration: Configuration,
++    val clock: FeelEngineClock
+ ) {
+ 
+   private val interpreter = new FeelInterpreter(valueMapper)
+@@ -125,13 +135,7 @@ class FeelEngine(
+     externalFunctionsEnabled = configuration.externalFunctionsEnabled
+   )
+ 
+-  logger.debug(
+-    s"Engine created. [" +
+-      s"value-mapper: $valueMapper, " +
+-      s"function-provider: $functionProvider, " +
+-      s"clock: $clock, " +
+-      s"configuration: $configuration]"
+-  )
++  
+ 
+   private def rootContext(): EvalContext = EvalContext.create(
+     valueMapper = valueMapper,
+@@ -216,18 +220,6 @@ class FeelEngine(
+ 
+   // ============ public API ============
+ 
+-  /** @deprecated
+-    *   Use [[org.camunda.feel.api.FeelEngineApi]] instead.
+-    */
+-  @deprecated def evalExpression(
+-      expression: String,
+-      variables: java.util.Map[String, Object]
+-  ): EvalExpressionResult =
+-    evalExpression(
+-      expression = expression,
+-      context = Context.StaticContext(variables.asScala.toMap)
+-    )
+-
+   /** @deprecated
+     *   Use [[org.camunda.feel.api.FeelEngineApi]] instead.
+     */
+@@ -247,18 +239,6 @@ class FeelEngine(
+     parseExpression(expression)
+       .flatMap(parsedExpression => eval(parsedExpression, context))
+ 
+-  /** @deprecated
+-    *   Use [[org.camunda.feel.api.FeelEngineApi]] instead.
+-    */
+-  @deprecated def evalUnaryTests(
+-      expression: String,
+-      variables: java.util.Map[String, Object]
+-  ): EvalUnaryTestsResult =
+-    evalUnaryTests(
+-      expression = expression,
+-      context = Context.StaticContext(variables.asScala.toMap)
+-    )
+-
+   /** @deprecated
+     *   Use [[org.camunda.feel.api.FeelEngineApi]] instead.
+     */
+@@ -286,18 +266,6 @@ class FeelEngine(
+   @deprecated def eval(exp: ParsedExpression, context: Context): EvalExpressionResult =
+     evaluate(expression = exp, context = context).toEither
+ 
+-  /** @deprecated
+-    *   Use [[org.camunda.feel.api.FeelEngineApi]] instead.
+-    */
+-  @deprecated def eval(
+-      exp: ParsedExpression,
+-      variables: java.util.Map[String, Object]
+-  ): EvalExpressionResult =
+-    eval(
+-      exp = exp,
+-      context = Context.StaticContext(variables.asScala.toMap)
+-    )
+-
+   /** @deprecated
+     *   Use [[org.camunda.feel.api.FeelEngineApi]] instead.
+     */
+diff --git a/src/main/scala/org/camunda/feel/api/FeelEngineApi.scala b/src/main/scala/org/camunda/feel/api/FeelEngineApi.scala
+index 301e0d5a..a76542e4 100644
+--- a/src/main/scala/org/camunda/feel/api/FeelEngineApi.scala
++++ b/src/main/scala/org/camunda/feel/api/FeelEngineApi.scala
+@@ -21,13 +21,14 @@ import org.camunda.feel.context.Context
+ import org.camunda.feel.impl.interpreter.EvalContext
+ import org.camunda.feel.syntaxtree.ParsedExpression
+ 
+-import scala.jdk.CollectionConverters.MapHasAsScala
++import scala.scalajs.js.annotation.JSExportAll
+ 
+ /** The API to interact with the FEEL engine.
+   *
+   * @param engine
+   *   the FEEL engine to interact with
+   */
++@JSExportAll
+ class FeelEngineApi(engine: FeelEngine) {
+ 
+   // =========== parse expression ===========
+@@ -101,24 +102,6 @@ class FeelEngineApi(engine: FeelEngine) {
+       context = Context.StaticContext(variables = variables)
+     )
+ 
+-  /** Evaluates a parsed expression with the given context.
+-    *
+-    * @param expression
+-    *   the parsed expression to evaluate
+-    * @param variables
+-    *   the variable context for the evaluation.
+-    * @return
+-    *   the result of the evaluation as [[EvaluationResult]]
+-    */
+-  def evaluate(
+-      expression: ParsedExpression,
+-      variables: java.util.Map[String, Object]
+-  ): EvaluationResult =
+-    evaluate(
+-      expression = expression,
+-      context = Context.StaticContext(variables = variables.asScala.toMap)
+-    )
+-
+   /** Evaluates a parsed unary-tests expression with the given input value and context.
+     *
+     * @param expression
+@@ -162,28 +145,6 @@ class FeelEngineApi(engine: FeelEngine) {
+       context = Context.StaticContext(variables = variables)
+     )
+ 
+-  /** Evaluates a parsed unary-tests expression with the given input value and context.
+-    *
+-    * @param expression
+-    *   the parsed expression to evaluate
+-    * @param inputValue
+-    *   the input value for the evaluation of the unary-tests
+-    * @param variables
+-    *   the variable context for the evaluation
+-    * @return
+-    *   the result of the evaluation as [[EvaluationResult]]
+-    */
+-  def evaluateWithInput(
+-      expression: ParsedExpression,
+-      inputValue: Any,
+-      variables: java.util.Map[String, Object]
+-  ): EvaluationResult =
+-    evaluateWithInput(
+-      expression = expression,
+-      inputValue = inputValue,
+-      context = Context.StaticContext(variables = variables.asScala.toMap)
+-    )
+-
+   // =========== parse and evaluate expression ===========
+ 
+   /** Evaluates an FEEL expression with the given context. This is a shortcut and skips the explicit
+@@ -228,25 +189,6 @@ class FeelEngineApi(engine: FeelEngine) {
+       context = Context.StaticContext(variables = variables)
+     )
+ 
+-  /** Evaluates an FEEL expression with the given context. This is a shortcut and skips the explicit
+-    * parsing step before the evaluation.
+-    *
+-    * @param expression
+-    *   the expression to evaluate
+-    * @param variables
+-    *   the variable context for the evaluation
+-    * @return
+-    *   the result of the evaluation as [[EvaluationResult]]
+-    */
+-  def evaluateExpression(
+-      expression: String,
+-      variables: java.util.Map[String, Object]
+-  ): EvaluationResult =
+-    evaluateExpression(
+-      expression = expression,
+-      context = Context.StaticContext(variables = variables.asScala.toMap)
+-    )
+-
+   // =========== parse and evaluate unary-tests ===========
+ 
+   /** Evaluates an FEEL unary-tests expression with the given input value and context. This is a
+@@ -297,29 +239,6 @@ class FeelEngineApi(engine: FeelEngine) {
+       context = Context.StaticContext(variables = variables)
+     )
+ 
+-  /** Evaluates an FEEL unary-tests expression with the given input value and context. This is a
+-    * shortcut and skips the explicit parsing step before the evaluation.
+-    *
+-    * @param expression
+-    *   the expression to evaluate
+-    * @param inputValue
+-    *   the input value for the evaluation of the unary-tests
+-    * @param variables
+-    *   the variable context for the evaluation
+-    * @return
+-    *   the result of the evaluation as [[EvaluationResult]]
+-    */
+-  def evaluateUnaryTests(
+-      expression: String,
+-      inputValue: Object,
+-      variables: java.util.Map[String, Object]
+-  ): EvaluationResult =
+-    evaluateUnaryTests(
+-      expression = expression,
+-      inputValue = inputValue,
+-      context = Context.StaticContext(variables = variables.asScala.toMap)
+-    )
+-
+   // =========== internal helpers ===========
+ 
+   private def createContextWithInput(context: Context, inputValue: Any): EvalContext = {
+@@ -329,4 +248,33 @@ class FeelEngineApi(engine: FeelEngine) {
+     EvalContext.wrap(context, engine.valueMapper).add(inputVariable -> wrappedInputValue)
+   }
+ 
++
++  // =========== JS-friendly entry points ===========
++
++  /** Evaluates an expression with variables from a JS object/dictionary.
++    * This avoids the Scala Map overloading issue when called from JavaScript.
++    */
++  def evalExpressionWithContext(
++      expression: String,
++      variables: scala.scalajs.js.Dictionary[Any]
++  ): EvaluationResult =
++    evaluateExpression(
++      expression = expression,
++      variables = variables.toMap
++    )
++
++  /** Evaluates unary tests with variables from a JS object/dictionary.
++    * This avoids the Scala Map overloading issue when called from JavaScript.
++    */
++  def evalUnaryTestsWithContext(
++      expression: String,
++      inputValue: Any,
++      variables: scala.scalajs.js.Dictionary[Any]
++  ): EvaluationResult =
++    evaluateUnaryTests(
++      expression = expression,
++      inputValue = inputValue,
++      variables = variables.toMap
++    )
++
+ }
+diff --git a/src/main/scala/org/camunda/feel/api/FeelEngineBuilder.scala b/src/main/scala/org/camunda/feel/api/FeelEngineBuilder.scala
+index 6d779b2e..530c2f26 100644
+--- a/src/main/scala/org/camunda/feel/api/FeelEngineBuilder.scala
++++ b/src/main/scala/org/camunda/feel/api/FeelEngineBuilder.scala
+@@ -23,8 +23,11 @@ import org.camunda.feel.impl.JavaValueMapper
+ import org.camunda.feel.valuemapper.{CustomValueMapper, ValueMapper}
+ import org.camunda.feel.valuemapper.ValueMapper.CompositeValueMapper
+ 
++import scala.scalajs.js.annotation.{JSExport, JSExportAll, JSExportTopLevel}
++
+ /** Builds a new instance of the FEEL engine. Use the setters to customize the engine.
+   */
++@JSExportAll
+ case class FeelEngineBuilder private (
+     functionProvider: FunctionProvider = defaultFunctionProvider,
+     valueMapper: ValueMapper = FeelEngine.defaultValueMapper,
+@@ -76,6 +79,7 @@ case class FeelEngineBuilder private (
+ 
+ }
+ 
++@JSExportTopLevel("FeelEngineBuilder")
+ object FeelEngineBuilder {
+ 
+   /** Creates a new builder for the FEEL engine.
+@@ -83,13 +87,15 @@ object FeelEngineBuilder {
+     * @return
+     *   a new builder
+     */
++  @JSExport
+   def create(): FeelEngineBuilder = FeelEngineBuilder()
+ 
+   /** Creates a new preconfigured builder for the FEEL engine. Use it if the engine is called from
+-    * Java code.
++    * JavaScript code. Includes the JavaValueMapper (now JS-native) for proper type conversion.
+     *
+     * @return
+     *   a new builder
+     */
+-  def forJava(): FeelEngineBuilder = FeelEngineBuilder().withCustomValueMapper(new JavaValueMapper)
++  @JSExport
++  def forJS(): FeelEngineBuilder = FeelEngineBuilder().withCustomValueMapper(new JavaValueMapper)
+ }
+diff --git a/src/main/scala/org/camunda/feel/context/JavaFunctionProvider.scala b/src/main/scala/org/camunda/feel/context/JavaFunctionProvider.scala
+index c706f3f5..1cb8a12f 100644
+--- a/src/main/scala/org/camunda/feel/context/JavaFunctionProvider.scala
++++ b/src/main/scala/org/camunda/feel/context/JavaFunctionProvider.scala
+@@ -16,69 +16,22 @@
+  */
+ package org.camunda.feel.context
+ 
+-import java.util.{Collections, Optional}
+-import org.camunda.feel.syntaxtree.{Val, ValFunction}
+-import scala.jdk.CollectionConverters.{CollectionHasAsScala, ListHasAsScala, SeqHasAsJava}
+-
+-/** Provides one or more functions which can be used in an expression.
++import org.camunda.feel.syntaxtree.ValFunction
++
++/** Scala.js stub for JavaFunctionProvider.
++  *
++  * In the JVM build, this class bridges Java custom function providers into the
++  * FEEL engine using java.util.List, java.util.Optional, and
++  * scala.jdk.CollectionConverters. None of these are available in Scala.js.
++  *
++  * In the browser, custom function providers should extend
++  * [[CustomFunctionProvider]] directly instead.
+   */
+ abstract class JavaFunctionProvider extends CustomFunctionProvider {
+ 
+-  /** Returns the function for the given name.
+-    *
+-    * @param functionName
+-    *   the name of the function
+-    * @return
+-    *   the function or [[Optional.empty()]], if no function is provided for this name
+-    */
+-  def resolveFunction(functionName: String): Optional[JavaFunction]
+-
+-  /** Returns the names of all functions.
+-    *
+-    * @return
+-    *   the names of all functions
+-    */
+-  def getFunctionNames(): java.util.Collection[String]
+-
+-  /** Returns a list of functions for the given name. There can be multiple functions with different
+-    * parameters.
+-    *
+-    * @param functionName
+-    *   the name of the function
+-    * @return
+-    *   a list of functions or an empty list, if no function is provided for this name
+-    */
+-  def resolveFunctions(functionName: String): java.util.List[JavaFunction] = {
+-    val function = resolveFunction(functionName)
+-
+-    if (function.isPresent) {
+-      Collections.singletonList(function.get)
+-    } else {
+-      Collections.emptyList()
+-    }
+-  }
+-
+-  override def getFunctions(name: String): List[ValFunction] = {
+-    resolveFunctions(name).asScala.map(f => asFunction(f)).toList
+-  }
+-
+-  override def getFunction(name: String): Option[ValFunction] = {
+-    getFunctions(name).headOption
+-  }
+-
+-  private def asFunction(function: JavaFunction): ValFunction = {
+-
+-    val paramList: List[String] = function.getParams().asScala.toList
+-
+-    val f: (List[Val] => Val) = (args: List[Val]) => {
+-
+-      val argList: java.util.List[Val] = args.asJava
+-
+-      function.getFunction().apply(argList)
+-    }
++  override def getFunctions(name: String): List[ValFunction] = List.empty
+ 
+-    ValFunction(paramList, f, function.hasVarArgs)
+-  }
++  override def getFunction(name: String): Option[ValFunction] = None
+ 
+-  override def functionNames: Iterable[String] = getFunctionNames().asScala
++  override def functionNames: Iterable[String] = Iterable.empty
+ }
+diff --git a/src/main/scala/org/camunda/feel/impl/DefaultValueMapper.scala b/src/main/scala/org/camunda/feel/impl/DefaultValueMapper.scala
+index 6b98e579..54b95ba5 100644
+--- a/src/main/scala/org/camunda/feel/impl/DefaultValueMapper.scala
++++ b/src/main/scala/org/camunda/feel/impl/DefaultValueMapper.scala
+@@ -26,7 +26,6 @@ import org.camunda.feel.{
+   YearMonthDuration
+ }
+ import org.camunda.feel.context.Context
+-import org.camunda.feel.impl.interpreter.ObjectContext
+ import org.camunda.feel.syntaxtree.{
+   Val,
+   ValBoolean,
+@@ -44,13 +43,10 @@ import org.camunda.feel.syntaxtree.{
+   ValNumber,
+   ValString,
+   ValTime,
+-  ValYearMonthDuration,
+-  ZonedTime
++  ValYearMonthDuration
+ }
+ import org.camunda.feel.valuemapper.CustomValueMapper
+ 
+-import java.time.{LocalDateTime, ZoneId}
+-import scala.jdk.CollectionConverters.{IterableHasAsScala, MapHasAsScala}
+ import scala.math.BigDecimal
+ 
+ class DefaultValueMapper extends CustomValueMapper {
+@@ -99,47 +95,16 @@ class DefaultValueMapper extends CustomValueMapper {
+       }
+     case Some(x)                                => Some(innerValueMapper(x))
+     case None                                   => Some(ValNull)
+-    case x if (isEnumeration(x))                => Some(ValString(x.toString))
+-
+-    // extended java types
+-    case x: java.math.BigDecimal     => Some(ValNumber(x))
+-    case x: java.math.BigInteger     => Some(ValNumber(BigDecimal(x)))
+-    case x: java.util.Date           =>
+-      Some(
+-        ValLocalDateTime(
+-          LocalDateTime.ofInstant(x.toInstant, ZoneId.systemDefault())
+-        )
+-      )
+-    case x: java.time.OffsetDateTime =>
+-      Some(
+-        ValDateTime(x.toZonedDateTime())
+-      )
+-    case x: java.time.OffsetTime     =>
+-      Some(
+-        ValTime(ZonedTime.of(x))
+-      )
+-    case x: java.util.List[_]        =>
+-      Some(
+-        ValList(x.asScala.toList map innerValueMapper)
+-      )
+-    case x: java.util.Map[_, _]      =>
+-      Some(
+-        ValContext(Context.StaticContext(x.asScala.map { case (key, value) =>
+-          key.toString -> innerValueMapper(value)
+-        }.toMap))
+-      )
+-    case x: java.lang.Enum[_]        => Some(ValString(x.name))
++
++    // Java/JVM-specific type conversions removed for Scala.js compatibility.
++    // In the JVM build, this handled java.math.BigDecimal, java.math.BigInteger,
++    // java.util.Date, java.time.OffsetDateTime/OffsetTime, java.util.List/Map,
++    // java.lang.Enum, and fallback ObjectContext wrapping.
++    // In Scala.js, JS-native types are handled by JavaValueMapper (now a JS adapter).
+ 
+     // other objects
+     case x: Throwable => Some(ValError(x.getMessage))
+-    case x            =>
+-      try {
+-        Some(
+-          ValContext(Context.CacheContext(ObjectContext(x)))
+-        )
+-      } catch {
+-        case _: Throwable => None
+-      }
++    case _            => None
+ 
+   }
+ 
+diff --git a/src/main/scala/org/camunda/feel/impl/JavaValueMapper.scala b/src/main/scala/org/camunda/feel/impl/JavaValueMapper.scala
+index a0579653..25b58f5c 100644
+--- a/src/main/scala/org/camunda/feel/impl/JavaValueMapper.scala
++++ b/src/main/scala/org/camunda/feel/impl/JavaValueMapper.scala
+@@ -20,9 +20,14 @@ import org.camunda.feel.context.Context
+ import org.camunda.feel.syntaxtree.{Val, ValContext, ValList, ValNumber}
+ import org.camunda.feel.valuemapper.CustomValueMapper
+ 
+-import scala.jdk.CollectionConverters.{MapHasAsJava, SeqHasAsJava}
++import scala.scalajs.js
++import scala.scalajs.js.JSConverters._
+ 
+-/** Transform FEEL types into common Java objects. This includes numbers, lists and contexts.
++/** Transform FEEL types into JS-native objects for Scala.js.
++  *
++  * Replaces the JVM JavaValueMapper which converted to java.util.List,
++  * java.util.Map, java.lang.Long/Double, etc. In Scala.js we convert
++  * to native JS arrays and objects instead.
+   */
+ class JavaValueMapper extends CustomValueMapper {
+ 
+@@ -30,36 +35,43 @@ class JavaValueMapper extends CustomValueMapper {
+     value match {
+ 
+       case ValNumber(number) =>
+-        Some(
+-          if (number.isWhole && number.isValidLong) {
+-            number.longValue: java.lang.Long
+-          } else {
+-            number.doubleValue: java.lang.Double
+-          }
+-        )
++        // In JS, all numbers are doubles — no Long/Double distinction needed
++        Some(number.doubleValue)
+ 
+       case ValList(list) =>
+         Some(
+-          (list map innerValueMapper).asJava: java.util.List[Any]
++          (list map innerValueMapper).toJSArray
+         )
+ 
+       case ValContext(context: Context) =>
+-        Some(
+-          context.variableProvider.getVariables
+-            .map { case (key, value) =>
+-              value match {
+-                case packed: Val => key -> innerValueMapper(packed)
+-                case unpacked    => key -> unpacked
+-              }
+-            }
+-            .toMap
+-            .asJava: java.util.Map[String, Any]
+-        )
++        val dict = js.Dictionary[Any]()
++        context.variableProvider.getVariables.foreach { case (key, value) =>
++          value match {
++            case packed: Val => dict(key) = innerValueMapper(packed)
++            case unpacked    => dict(key) = unpacked
++          }
++        }
++        Some(dict)
+ 
+       case _ => None
+     }
+ 
+-  override def toVal(x: Any, innerValueMapper: Any => Val): Option[Val] = None
++  override def toVal(x: Any, innerValueMapper: Any => Val): Option[Val] = {
++    x match {
++      // Let Val instances pass through to DefaultValueMapper (which returns them as-is).
++      // Without this guard, Scala case classes like ValNumber would match js.Object below.
++      case _: Val => None
++      // Handle JS arrays
++      case arr: js.Array[_] =>
++        Some(ValList(arr.toList.map(v => innerValueMapper(v.asInstanceOf[Any]))))
++      // Handle JS objects (dictionaries)
++      case obj: js.Object if !js.isUndefined(obj) =>
++        val dict = obj.asInstanceOf[js.Dictionary[Any]]
++        val map = dict.toMap.map { case (k, v) => k -> innerValueMapper(v) }
++        Some(ValContext(Context.StaticContext(map)))
++      case _ => None
++    }
++  }
+ 
+   override val priority: Int = 10
+ }
+diff --git a/src/main/scala/org/camunda/feel/impl/SpiServiceLoader.scala b/src/main/scala/org/camunda/feel/impl/SpiServiceLoader.scala
+index ecadcae4..38a3fd04 100644
+--- a/src/main/scala/org/camunda/feel/impl/SpiServiceLoader.scala
++++ b/src/main/scala/org/camunda/feel/impl/SpiServiceLoader.scala
+@@ -16,45 +16,32 @@
+  */
+ package org.camunda.feel.impl
+ 
+-import java.util.ServiceLoader
+ import org.camunda.feel.FeelEngineClock
+-import org.camunda.feel.context.{CustomFunctionProvider, FunctionProvider}
+-import org.camunda.feel.valuemapper.{CustomValueMapper, ValueMapper}
+-
+-import scala.jdk.CollectionConverters.IteratorHasAsScala
+-import scala.reflect.{ClassTag, classTag}
++import org.camunda.feel.context.FunctionProvider
++import org.camunda.feel.valuemapper.ValueMapper
+ 
++/**
++ * Stubbed SPI service loader for Scala.js.
++ *
++ * In the JVM build, this uses java.util.ServiceLoader to discover providers
++ * at runtime. In the Scala.js build, ServiceLoader is not available, so we
++ * directly instantiate the default implementations.
++ */
+ object SpiServiceLoader {
+ 
+   def loadValueMapper: ValueMapper = {
+-    val customValueMappers = loadServiceProvider[CustomValueMapper]()
+-    ValueMapper.CompositeValueMapper(customValueMappers)
++    // No custom value mappers in the JS build — use defaults only
++    ValueMapper.CompositeValueMapper(List.empty)
+   }
+ 
+-  def loadFunctionProvider: FunctionProvider =
+-    loadServiceProvider[CustomFunctionProvider]() match {
+-      case Nil      => FunctionProvider.EmptyFunctionProvider
+-      case p :: Nil => p
+-      case ps       => FunctionProvider.CompositeFunctionProvider(ps)
+-    }
++  def loadFunctionProvider: FunctionProvider = {
++    // No custom function providers in the JS build
++    FunctionProvider.EmptyFunctionProvider
++  }
+ 
+   def loadClock: FeelEngineClock = {
+-    loadServiceProvider[FeelEngineClock]().headOption
+-      .getOrElse(FeelEngineClock.SystemClock)
++    // Always use the system clock in the JS build
++    FeelEngineClock.SystemClock
+   }
+ 
+-  private def loadServiceProvider[T: ClassTag](): List[T] =
+-    try {
+-      val loader =
+-        ServiceLoader.load(classTag[T].runtimeClass.asInstanceOf[Class[T]])
+-      loader.iterator.asScala.toList
+-    } catch {
+-      case t: Throwable =>
+-        System.err.println(
+-          s"Failed to load service provider: ${classTag[T].runtimeClass.getSimpleName}"
+-        )
+-        t.printStackTrace()
+-        throw t
+-    }
+-
+ }
+diff --git a/src/main/scala/org/camunda/feel/impl/builtin/ConversionBuiltinFunctions.scala b/src/main/scala/org/camunda/feel/impl/builtin/ConversionBuiltinFunctions.scala
+index 32f45875..2c48bc32 100644
+--- a/src/main/scala/org/camunda/feel/impl/builtin/ConversionBuiltinFunctions.scala
++++ b/src/main/scala/org/camunda/feel/impl/builtin/ConversionBuiltinFunctions.scala
+@@ -16,6 +16,7 @@
+  */
+ package org.camunda.feel.impl.builtin
+ 
++
+ import org.camunda.feel.impl.builtin.BuiltinFunction.builtinFunction
+ import org.camunda.feel.syntaxtree._
+ import org.camunda.feel.valuemapper.ValueMapper
+@@ -301,6 +302,8 @@ class ConversionBuiltinFunctions(valueMapper: ValueMapper) {
+     }
+   )
+ 
++  
++
+   private def parseDate(d: String): Val = {
+     if (isValidDate(d)) {
+       Try(ValDate(d)).getOrElse {
+diff --git a/src/main/scala/org/camunda/feel/impl/builtin/StringBuiltinFunctions.scala b/src/main/scala/org/camunda/feel/impl/builtin/StringBuiltinFunctions.scala
+index 94ff8c53..aadba054 100644
+--- a/src/main/scala/org/camunda/feel/impl/builtin/StringBuiltinFunctions.scala
++++ b/src/main/scala/org/camunda/feel/impl/builtin/StringBuiltinFunctions.scala
+@@ -16,7 +16,7 @@
+  */
+ package org.camunda.feel.impl.builtin
+ 
+-import com.fasterxml.uuid.Generators
++import java.util.UUID
+ import org.camunda.feel.impl.builtin.BuiltinFunction.builtinFunction
+ import org.camunda.feel.syntaxtree.{ValBoolean, ValError, ValList, ValNumber, ValString}
+ 
+@@ -27,8 +27,6 @@ import scala.util.Try
+ 
+ object StringBuiltinFunctions {
+ 
+-  private lazy val generator = Generators.timeBasedEpochRandomGenerator()
+-
+   def functions = Map(
+     "substring"        -> List(substringFunction, substringFunction3),
+     "string length"    -> List(stringLengthFunction),
+@@ -275,7 +273,7 @@ object StringBuiltinFunctions {
+     builtinFunction(
+       params = List(),
+       invoke = { case List() =>
+-        ValString(generator.generate.toString)
++        ValString(new UUID(scala.util.Random.nextLong(), scala.util.Random.nextLong()).toString)
+       }
+     )
+ 
+@@ -295,4 +293,4 @@ object StringBuiltinFunctions {
+     }
+   )
+ 
+-}
++}
+\ No newline at end of file
+diff --git a/src/main/scala/org/camunda/feel/impl/interpreter/FeelInterpreter.scala b/src/main/scala/org/camunda/feel/impl/interpreter/FeelInterpreter.scala
+index 1d078f36..ef19b5e1 100644
+--- a/src/main/scala/org/camunda/feel/impl/interpreter/FeelInterpreter.scala
++++ b/src/main/scala/org/camunda/feel/impl/interpreter/FeelInterpreter.scala
+@@ -44,10 +44,8 @@ class FeelInterpreter(private val valueMapper: ValueMapper) {
+   private val valueComparator = new ValComparator(valueMapper)
+ 
+   def eval(expression: Exp)(implicit context: EvalContext): Val = {
+-    // Check if the current thread was interrupted, otherwise long-running evaluations can not be interrupted and fully block the thread
+-    if (Thread.interrupted()) {
+-      throw new InterruptedException()
+-    }
++    // Thread.interrupted() check removed for Scala.js compatibility.
++    // JS is single-threaded, so interruption is not applicable.
+ 
+     expression match {
+ 
+@@ -277,15 +275,7 @@ class FeelInterpreter(private val valueMapper: ValueMapper) {
+           params,
+           paramValues =>
+             body match {
+-              case JavaFunctionInvocation(className, methodName, arguments) =>
+-                invokeJavaFunction(
+-                  className,
+-                  methodName,
+-                  arguments,
+-                  paramValues,
+-                  context.valueMapper
+-                )
+-              case _                                                        => eval(body)(context.addAll((params zip paramValues).toMap))
++              case _  => eval(body)(context.addAll((params zip paramValues).toMap))
+             }
+         )
+ 
+@@ -895,47 +885,7 @@ class FeelInterpreter(private val valueMapper: ValueMapper) {
+         }
+     }
+ 
+-  private def invokeJavaFunction(
+-      className: String,
+-      methodName: String,
+-      arguments: List[String],
+-      paramValues: List[Val],
+-      valueMapper: ValueMapper
+-  )(implicit context: EvalContext): Val = {
+-    try {
+-
+-      val clazz = JavaClassMapper.loadClass(className)
+-
+-      val argTypes = arguments map JavaClassMapper.loadClass
+-
+-      val method = clazz.getDeclaredMethod(methodName, argTypes: _*)
+-
+-      val argJavaObjects = paramValues zip argTypes map { case (obj, clazz) =>
+-        JavaClassMapper.asJavaObject(obj, clazz)
+-      }
+-
+-      val result = method.invoke(null, argJavaObjects: _*)
+-
+-      valueMapper.toVal(result)
+-
+-    } catch {
+-      case e: ClassNotFoundException =>
+-        error(
+-          EvaluationFailureType.FUNCTION_INVOCATION_FAILURE,
+-          s"Failed to load class '$className'"
+-        )
+-      case e: NoSuchMethodException  =>
+-        error(
+-          EvaluationFailureType.FUNCTION_INVOCATION_FAILURE,
+-          s"Failed to get method with name '$methodName' and arguments '$arguments' from class '$className'"
+-        )
+-      case _: Throwable              =>
+-        error(
+-          EvaluationFailureType.FUNCTION_INVOCATION_FAILURE,
+-          s"Failed to invoke method with name '$methodName' and arguments '$arguments' from class '$className'"
+-        )
+-    }
+-  }
++  
+ 
+   private def toRange(range: ConstRange)(implicit context: EvalContext): Val = {
+     withValues(
+diff --git a/src/main/scala/org/camunda/feel/impl/interpreter/JavaClassMapper.scala b/src/main/scala/org/camunda/feel/impl/interpreter/JavaClassMapper.scala
+index 1be8ec86..ea70c004 100644
+--- a/src/main/scala/org/camunda/feel/impl/interpreter/JavaClassMapper.scala
++++ b/src/main/scala/org/camunda/feel/impl/interpreter/JavaClassMapper.scala
+@@ -16,43 +16,27 @@
+  */
+ package org.camunda.feel.impl.interpreter
+ 
+-import org.camunda.feel.syntaxtree.{Val, ValBoolean, ValNull, ValNumber, ValString}
++import org.camunda.feel.syntaxtree.Val
+ 
+-/** @author
+-  *   Philipp
++/** Scala.js stub for JavaClassMapper.
++  *
++  * In the JVM build, this maps FEEL values to Java primitive wrapper types
++  * (java.lang.Integer, java.lang.Long, etc.) for external Java function
++  * invocations. External Java functions are not supported in Scala.js.
++  *
++  * This object is not referenced anywhere in the current codebase but is
++  * retained for source compatibility.
+   */
+ object JavaClassMapper {
+ 
+-  val classLoader = getClass.getClassLoader
++  def loadClass(className: String): Any =
++    throw new UnsupportedOperationException(
++      s"JavaClassMapper.loadClass is not supported in Scala.js (className=$className)"
++    )
+ 
+-  val stringClass = classOf[java.lang.String]
+-
+-  def loadClass(className: String): Class[_] = className match {
+-    case "int"     => java.lang.Integer.TYPE
+-    case "long"    => java.lang.Long.TYPE
+-    case "float"   => java.lang.Float.TYPE
+-    case "double"  => java.lang.Double.TYPE
+-    case "boolean" => java.lang.Boolean.TYPE
+-    case "String"  => stringClass
+-    case _         => classLoader.loadClass(className)
+-  }
+-
+-  def asJavaObject(value: Val, clazz: Class[_]): java.lang.Object =
+-    (value, clazz) match {
+-      case (ValNull, _)                            => null
+-      case (ValBoolean(b), java.lang.Boolean.TYPE) =>
+-        java.lang.Boolean.valueOf(b)
+-      case (ValString(s), stringClass)             => java.lang.String.valueOf(s)
+-      case (ValNumber(n), java.lang.Integer.TYPE)  =>
+-        java.lang.Integer.valueOf(n.intValue)
+-      case (ValNumber(n), java.lang.Long.TYPE)     =>
+-        java.lang.Long.valueOf(n.longValue)
+-      case (ValNumber(n), java.lang.Float.TYPE)    =>
+-        java.lang.Float.valueOf(n.floatValue)
+-      case (ValNumber(n), java.lang.Double.TYPE)   =>
+-        java.lang.Double.valueOf(n.doubleValue)
+-      case _                                       =>
+-        throw new IllegalArgumentException(s"can not cast value '$value' to class '$clazz'")
+-    }
++  def asJavaObject(value: Val, clazz: Any): Any =
++    throw new UnsupportedOperationException(
++      "JavaClassMapper.asJavaObject is not supported in Scala.js"
++    )
+ 
+ }
+diff --git a/src/main/scala/org/camunda/feel/impl/interpreter/ObjectContext.scala b/src/main/scala/org/camunda/feel/impl/interpreter/ObjectContext.scala
+index e9e9e425..bff21090 100644
+--- a/src/main/scala/org/camunda/feel/impl/interpreter/ObjectContext.scala
++++ b/src/main/scala/org/camunda/feel/impl/interpreter/ObjectContext.scala
+@@ -19,8 +19,6 @@ package org.camunda.feel.impl.interpreter
+ import org.camunda.feel.context.{Context, FunctionProvider, VariableProvider}
+ import org.camunda.feel.syntaxtree.ValFunction
+ 
+-import java.lang.reflect.Method
+-
+ /** A context that wraps the fields and methods of a given JVM object
+   *
+   * @param obj
+@@ -28,83 +26,8 @@ import java.lang.reflect.Method
+   */
+ case class ObjectContext(obj: Any) extends Context {
+ 
+-  private lazy val publicFields = obj.getClass.getFields
+-  private lazy val allFields    = obj.getClass.getDeclaredFields
+-
+-  private lazy val publicMethodsWithoutArguments = obj.getClass.getMethods
+-    .filter(method => method.getParameterCount == 0)
+-
+-  override val variableProvider = new VariableProvider {
+-    override def getVariable(name: String): Option[Any] = {
+-
+-      val fieldForName = publicFields find (field => field.getName == name)
+-
+-      fieldForName.map(_.get(obj)) orElse {
+-        val methods = publicMethodsWithoutArguments find (method =>
+-          isGetterOf(method, name) || isBooleanGetterOf(method, name)
+-        )
+-
+-        methods.map(_.invoke(obj))
+-      }
+-    }
+-
+-    override def keys: Iterable[String] = {
+-      val fieldsWithPublicGetter = allFields.filter(field =>
+-        publicMethodsWithoutArguments.exists(method =>
+-          isGetterOf(method, field.getName) || isBooleanGetterOf(method, field.getName)
+-        )
+-      )
+-
+-      publicFields.map(_.getName) ++ fieldsWithPublicGetter.map(_.getName)
+-    }
+-  }
+-
+-  override val functionProvider = new FunctionProvider {
+-    override def getFunctions(name: String): List[ValFunction] = {
+-      obj.getClass.getMethods
+-        .find(method => {
+-          method.getName == name
+-        })
+-        .map(method => {
+-          val params = method.getParameters.map(param => param.getName).toList
+-
+-          ValFunction(
+-            params,
+-            params => {
+-
+-              val paramJavaObjects = params zip method.getParameterTypes map { case (obj, clazz) =>
+-                JavaClassMapper.asJavaObject(obj, clazz)
+-              }
+-              val result           = method.invoke(obj, paramJavaObjects: _*)
+-              result
+-            }
+-          )
+-        })
+-        .toList
+-    }
+-
+-    override def functionNames: Iterable[String] =
+-      obj.getClass.getMethods.map(_.getName)
+-  }
+-
+-  private def getGetterName(fieldName: String) =
+-    "get" + fieldName.capitalize
+-
+-  private def getBooleanGetterName(fieldName: String) =
+-    "is" + fieldName.capitalize
+-
+-  private def isGetterOf(method: Method, fieldName: String): Boolean = {
+-    val methodName = method.getName
+-
+-    methodName == fieldName || methodName == getGetterName(fieldName)
+-  }
+-
+-  private def isBooleanGetterOf(method: Method, fieldName: String): Boolean = {
+-    val returnType = method.getReturnType
++  override val variableProvider = VariableProvider.EmptyVariableProvider
+ 
+-    method.getName == getBooleanGetterName(
+-      fieldName
+-    ) && (returnType == java.lang.Boolean.TYPE || returnType == classOf[java.lang.Boolean])
+-  }
++  override val functionProvider = FunctionProvider.EmptyFunctionProvider
+ 
+ }
+diff --git a/src/main/scala/org/camunda/feel/impl/script/CompiledFeelScript.scala b/src/main/scala/org/camunda/feel/impl/script/CompiledFeelScript.scala
+deleted file mode 100644
+index 2703a14c..00000000
+--- a/src/main/scala/org/camunda/feel/impl/script/CompiledFeelScript.scala
++++ /dev/null
+@@ -1,29 +0,0 @@
+-/*
+- * Copyright Camunda Services GmbH and/or licensed to Camunda Services GmbH
+- * under one or more contributor license agreements. See the NOTICE file
+- * distributed with this work for additional information regarding copyright
+- * ownership. Camunda licenses this file to you under the Apache License,
+- * Version 2.0; you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.camunda.feel.impl.script
+-
+-import javax.script.{CompiledScript, ScriptContext, ScriptEngine}
+-import org.camunda.feel.syntaxtree.ParsedExpression
+-
+-case class CompiledFeelScript(engine: FeelScriptEngine, val expression: ParsedExpression)
+-    extends CompiledScript {
+-
+-  def getEngine: ScriptEngine = engine
+-
+-  def eval(context: ScriptContext): Object = engine.eval(this, context)
+-
+-}
+diff --git a/src/main/scala/org/camunda/feel/impl/script/FeelExpressionScriptEngine.scala b/src/main/scala/org/camunda/feel/impl/script/FeelExpressionScriptEngine.scala
+deleted file mode 100644
+index 130e146d..00000000
+--- a/src/main/scala/org/camunda/feel/impl/script/FeelExpressionScriptEngine.scala
++++ /dev/null
+@@ -1,30 +0,0 @@
+-/*
+- * Copyright Camunda Services GmbH and/or licensed to Camunda Services GmbH
+- * under one or more contributor license agreements. See the NOTICE file
+- * distributed with this work for additional information regarding copyright
+- * ownership. Camunda licenses this file to you under the Apache License,
+- * Version 2.0; you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.camunda.feel.impl.script
+-
+-import org.camunda.feel.impl.parser.FeelParser
+-
+-import javax.script.ScriptEngineFactory
+-
+-class FeelExpressionScriptEngine(val factory: ScriptEngineFactory) extends FeelScriptEngine {
+-
+-  val eval = (expression: String, context: Map[String, Any]) =>
+-    engine.evalExpression(expression, context)
+-
+-  val parse = (expression: String) => FeelParser.parseExpression(expression)
+-
+-}
+diff --git a/src/main/scala/org/camunda/feel/impl/script/FeelScriptEngine.scala b/src/main/scala/org/camunda/feel/impl/script/FeelScriptEngine.scala
+deleted file mode 100644
+index 119e323b..00000000
+--- a/src/main/scala/org/camunda/feel/impl/script/FeelScriptEngine.scala
++++ /dev/null
+@@ -1,138 +0,0 @@
+-/*
+- * Copyright Camunda Services GmbH and/or licensed to Camunda Services GmbH
+- * under one or more contributor license agreements. See the NOTICE file
+- * distributed with this work for additional information regarding copyright
+- * ownership. Camunda licenses this file to you under the Apache License,
+- * Version 2.0; you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.camunda.feel.impl.script
+-
+-import fastparse.Parsed
+-
+-import java.io.{Closeable, IOException, Reader}
+-import org.camunda.feel.FeelEngine
+-import org.camunda.feel.FeelEngine.EvalExpressionResult
+-import org.camunda.feel.impl.SpiServiceLoader
+-import org.camunda.feel.syntaxtree.{Exp, ParsedExpression}
+-
+-import javax.script.{
+-  AbstractScriptEngine,
+-  Bindings,
+-  Compilable,
+-  CompiledScript,
+-  ScriptContext,
+-  ScriptEngine,
+-  ScriptEngineFactory,
+-  ScriptException,
+-  SimpleBindings
+-}
+-import scala.annotation.tailrec
+-import scala.jdk.CollectionConverters.MapHasAsScala
+-
+-trait FeelScriptEngine extends AbstractScriptEngine with ScriptEngine with Compilable {
+-
+-  val eval: (String, Map[String, Any]) => EvalExpressionResult
+-
+-  val parse: String => Parsed[Exp]
+-
+-  val factory: ScriptEngineFactory
+-
+-  lazy val engine: FeelEngine =
+-    new FeelEngine(
+-      functionProvider = SpiServiceLoader.loadFunctionProvider,
+-      valueMapper = SpiServiceLoader.loadValueMapper,
+-      clock = SpiServiceLoader.loadClock
+-    )
+-
+-  def getFactory: ScriptEngineFactory = factory
+-
+-  def createBindings(): Bindings = new SimpleBindings
+-
+-  def eval(reader: Reader, context: ScriptContext): Object = {
+-    val script = readerAsString(reader)
+-
+-    eval(script, context)
+-  }
+-
+-  def eval(script: String, context: ScriptContext): Object = {
+-    val engineContext = getEngineContext(context)
+-    val result        = eval(script, engineContext)
+-
+-    handleEvaluationResult(result)
+-  }
+-
+-  def eval(script: CompiledFeelScript, context: ScriptContext): Object = {
+-    val engineContext = getEngineContext(context)
+-    val result        = engine.eval(script.expression, engineContext)
+-
+-    handleEvaluationResult(result)
+-  }
+-
+-  def compile(reader: Reader): CompiledScript = {
+-    val script = readerAsString(reader)
+-
+-    compile(script)
+-  }
+-
+-  def compile(script: String): CompiledScript = parse(script) match {
+-    case Parsed.Success(exp, _)      =>
+-      CompiledFeelScript(this, ParsedExpression(exp, script))
+-    case Parsed.Failure(_, _, extra) =>
+-      throw new ScriptException(
+-        s"failed to parse expression '$script':\n${extra.trace().aggregateMsg}"
+-      )
+-  }
+-
+-  private def handleEvaluationResult(result: EvalExpressionResult): Object =
+-    result match {
+-      case Right(value)  => value.asInstanceOf[AnyRef]
+-      case Left(failure) => throw new ScriptException(failure.message)
+-    }
+-
+-  private def getEngineContext(context: ScriptContext): Map[String, Any] = {
+-    List(ScriptContext.GLOBAL_SCOPE, ScriptContext.ENGINE_SCOPE)
+-      .flatMap(scope => Option(context.getBindings(scope)))
+-      .flatMap(_.asScala)
+-      .toMap
+-  }
+-
+-  private def readerAsString(reader: Reader): String = {
+-    try {
+-      read(reader)
+-    } catch {
+-      case e: IOException => throw new ScriptException(e)
+-    } finally {
+-      closeSilently(reader)
+-    }
+-  }
+-
+-  @tailrec
+-  private def read(reader: Reader, buffer: StringBuffer = new StringBuffer): String = {
+-    val chars = new Array[Char](16 * 1024)
+-
+-    reader.read(chars, 0, chars.length) match {
+-      case -1 => buffer.toString
+-      case i  =>
+-        buffer.append(chars, 0, i)
+-        read(reader, buffer)
+-    }
+-  }
+-
+-  private def closeSilently(closable: Closeable) {
+-    try {
+-      closable.close()
+-    } catch {
+-      case _: IOException => // ignore
+-    }
+-  }
+-
+-}
+diff --git a/src/main/scala/org/camunda/feel/impl/script/FeelScriptEngineFactory.scala b/src/main/scala/org/camunda/feel/impl/script/FeelScriptEngineFactory.scala
+deleted file mode 100644
+index 05b46e3c..00000000
+--- a/src/main/scala/org/camunda/feel/impl/script/FeelScriptEngineFactory.scala
++++ /dev/null
+@@ -1,82 +0,0 @@
+-/*
+- * Copyright Camunda Services GmbH and/or licensed to Camunda Services GmbH
+- * under one or more contributor license agreements. See the NOTICE file
+- * distributed with this work for additional information regarding copyright
+- * ownership. Camunda licenses this file to you under the Apache License,
+- * Version 2.0; you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.camunda.feel.impl.script
+-
+-import javax.script.{ScriptEngine, ScriptEngineFactory}
+-import scala.jdk.CollectionConverters.SeqHasAsJava
+-
+-/** @author
+-  *   Philipp Ossler
+-  */
+-class FeelScriptEngineFactory extends ScriptEngineFactory {
+-
+-  import FeelScriptEngineFactory._
+-
+-  def getEngineName(): String = ENGINE_NAME
+-
+-  def getEngineVersion(): String = ENGINE_VERSION
+-
+-  def getExtensions(): java.util.List[String] = EXTENSIONS.asJava
+-
+-  def getLanguageName(): String = LANGUAGE_SHORT_NAME
+-
+-  def getLanguageVersion(): String = LANGUAGE_VERSION
+-
+-  def getMethodCallSyntax(x$1: String, x$2: String, x$3: String*): String =
+-    throw new UnsupportedOperationException()
+-
+-  def getMimeTypes(): java.util.List[String] = List.empty.asJava
+-
+-  def getNames(): java.util.List[String] =
+-    List(ENGINE_NAME, LANGUAGE_NAME, LANGUAGE_SHORT_NAME, LANGUAGE_QUALIFIED_NAME).asJava
+-
+-  def getOutputStatement(x$1: String): String =
+-    throw new UnsupportedOperationException()
+-
+-  def getParameter(key: String): Object = key match {
+-    case ScriptEngine.NAME             => getLanguageName
+-    case ScriptEngine.ENGINE           => getEngineName
+-    case ScriptEngine.ENGINE_VERSION   => getEngineVersion
+-    case ScriptEngine.LANGUAGE         => getLanguageName
+-    case ScriptEngine.LANGUAGE_VERSION => getLanguageVersion
+-    case "THREADING"                   => "STATELESS"
+-  }
+-
+-  def getProgram(statements: String*): String =
+-    throw new UnsupportedOperationException()
+-
+-  def getScriptEngine(): ScriptEngine = new FeelExpressionScriptEngine(this)
+-
+-}
+-
+-object FeelScriptEngineFactory {
+-
+-  val ENGINE_NAME = "feel-scala"
+-
+-  val ENGINE_VERSION = "1.0.0"
+-
+-  val LANGUAGE_NAME = "Friendly Enough Expression Language"
+-
+-  val LANGUAGE_SHORT_NAME = "feel"
+-
+-  val LANGUAGE_QUALIFIED_NAME = "http://www.omg.org/spec/FEEL/20140401"
+-
+-  val LANGUAGE_VERSION = "1.1"
+-
+-  val EXTENSIONS = List("feel")
+-
+-}
+diff --git a/src/main/scala/org/camunda/feel/impl/script/FeelUnaryTestsScriptEngine.scala b/src/main/scala/org/camunda/feel/impl/script/FeelUnaryTestsScriptEngine.scala
+deleted file mode 100644
+index 9f9720a5..00000000
+--- a/src/main/scala/org/camunda/feel/impl/script/FeelUnaryTestsScriptEngine.scala
++++ /dev/null
+@@ -1,30 +0,0 @@
+-/*
+- * Copyright Camunda Services GmbH and/or licensed to Camunda Services GmbH
+- * under one or more contributor license agreements. See the NOTICE file
+- * distributed with this work for additional information regarding copyright
+- * ownership. Camunda licenses this file to you under the Apache License,
+- * Version 2.0; you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.camunda.feel.impl.script
+-
+-import org.camunda.feel.impl.parser.FeelParser
+-
+-import javax.script.ScriptEngineFactory
+-
+-class FeelUnaryTestsScriptEngine(val factory: ScriptEngineFactory) extends FeelScriptEngine {
+-
+-  val eval = (expression: String, context: Map[String, Any]) =>
+-    engine.evalUnaryTests(expression, context)
+-
+-  val parse = (expression: String) => FeelParser.parseUnaryTests(expression)
+-
+-}
+diff --git a/src/main/scala/org/camunda/feel/impl/script/FeelUnaryTestsScriptEngineFactory.scala b/src/main/scala/org/camunda/feel/impl/script/FeelUnaryTestsScriptEngineFactory.scala
+deleted file mode 100644
+index c796309e..00000000
+--- a/src/main/scala/org/camunda/feel/impl/script/FeelUnaryTestsScriptEngineFactory.scala
++++ /dev/null
+@@ -1,78 +0,0 @@
+-/*
+- * Copyright Camunda Services GmbH and/or licensed to Camunda Services GmbH
+- * under one or more contributor license agreements. See the NOTICE file
+- * distributed with this work for additional information regarding copyright
+- * ownership. Camunda licenses this file to you under the Apache License,
+- * Version 2.0; you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.camunda.feel.impl.script
+-
+-import javax.script.{ScriptEngine, ScriptEngineFactory}
+-import scala.jdk.CollectionConverters.SeqHasAsJava
+-
+-/** @author
+-  *   Philipp Ossler
+-  */
+-class FeelUnaryTestsScriptEngineFactory extends ScriptEngineFactory {
+-
+-  import FeelUnaryTestsScriptEngineFactory._
+-
+-  def getEngineName(): String = ENGINE_NAME
+-
+-  def getEngineVersion(): String = ENGINE_VERSION
+-
+-  def getExtensions(): java.util.List[String] = List.empty.asJava
+-
+-  def getLanguageName(): String = LANGUAGE_SHORT_NAME
+-
+-  def getLanguageVersion(): String = LANGUAGE_VERSION
+-
+-  def getMethodCallSyntax(x$1: String, x$2: String, x$3: String*): String =
+-    throw new UnsupportedOperationException()
+-
+-  def getMimeTypes(): java.util.List[String] = List.empty.asJava
+-
+-  def getNames(): java.util.List[String] =
+-    List(ENGINE_NAME, LANGUAGE_NAME, LANGUAGE_SHORT_NAME).asJava
+-
+-  def getOutputStatement(x$1: String): String =
+-    throw new UnsupportedOperationException()
+-
+-  def getParameter(key: String): Object = key match {
+-    case ScriptEngine.NAME             => getLanguageName
+-    case ScriptEngine.ENGINE           => getEngineName
+-    case ScriptEngine.ENGINE_VERSION   => getEngineVersion
+-    case ScriptEngine.LANGUAGE         => getLanguageName
+-    case ScriptEngine.LANGUAGE_VERSION => getLanguageVersion
+-    case "THREADING"                   => "STATELESS"
+-  }
+-
+-  def getProgram(statements: String*): String =
+-    throw new UnsupportedOperationException()
+-
+-  def getScriptEngine(): ScriptEngine = new FeelUnaryTestsScriptEngine(this)
+-
+-}
+-
+-object FeelUnaryTestsScriptEngineFactory {
+-
+-  val ENGINE_NAME = "feel-scala-unary-tests"
+-
+-  val ENGINE_VERSION = "1.0.0"
+-
+-  val LANGUAGE_NAME = "Friendly Enough Expression Language - Unary Tests"
+-
+-  val LANGUAGE_SHORT_NAME = "feel-unary-tests"
+-
+-  val LANGUAGE_VERSION = "1.1"
+-
+-}
+diff --git a/src/main/scala/org/camunda/feel/valuemapper/JavaCustomValueMapper.scala b/src/main/scala/org/camunda/feel/valuemapper/JavaCustomValueMapper.scala
+index 5acc72c3..27f858ea 100644
+--- a/src/main/scala/org/camunda/feel/valuemapper/JavaCustomValueMapper.scala
++++ b/src/main/scala/org/camunda/feel/valuemapper/JavaCustomValueMapper.scala
+@@ -18,56 +18,16 @@ package org.camunda.feel.valuemapper
+ 
+ import org.camunda.feel.syntaxtree.Val
+ 
++/** Scala.js-compatible version of JavaCustomValueMapper.
++  *
++  * The JVM version uses java.util.Optional and java.util.function.Function
++  * which are not available in Scala.js. This version uses Scala-native Option
++  * and function types instead.
++  *
++  * Custom value mappers should extend CustomValueMapper directly in the
++  * Scala.js build. This class is kept for API compatibility.
++  */
+ abstract class JavaCustomValueMapper extends CustomValueMapper {
+ 
+-  /** Transform the given object into a FEEL type - one of [[Val]] (e.g. [[Double]] to
+-    * [[ValNumber]]). If it can't be transformed then it returns [[None]] instead and the object is
+-    * passed to the next mapper in the chain.
+-    *
+-    * @param x
+-    *   the object to transform
+-    * @param innerValueMapper
+-    *   the mapper function to transform inner values of a collection type
+-    * @return
+-    *   the FEEL representation of the object
+-    */
+-  def toValue(
+-      x: Any,
+-      innerValueMapper: java.util.function.Function[Any, Val]
+-  ): java.util.Optional[Val]
+-
+-  override def toVal(x: Any, innerValueMapper: Any => Val): Option[Val] = {
+-    toValue(x, innerValue => innerValueMapper.apply(innerValue)) match {
+-      case v if (v.isPresent) => Some(v.get)
+-      case _                  => None
+-    }
+-  }
+-
+-  /** Transform the given FEEL type into a base Scala/Java object (e.g. [[ValNumber]] to
+-    * [[Double]]). If it can't be transformed then it returns [[None]] instead and the object is
+-    * passed to the next mapper in the chain.
+-    *
+-    * @param value
+-    *   the FEEL type to transform
+-    * @param innerValueMapper
+-    *   the mapper function to transform inner values of a collection type
+-    * @return
+-    *   the base object of the FEEL type
+-    */
+-  def unpackValue(
+-      value: Val,
+-      innerValueMapper: java.util.function.Function[Val, Any]
+-  ): java.util.Optional[Any]
+-
+-  override def unpackVal(value: Val, innerValueMapper: Val => Any): Option[Any] = {
+-    unpackValue(value, innerValue => innerValueMapper.apply(innerValue)) match {
+-      case x if (x.isPresent) => Some(x.get)
+-      case _                  => None
+-    }
+-  }
+-
+-  /** The priority of this mapper in the chain. The mappers are invoked in order of their priority,
+-    * starting with the highest priority.
+-    */
+   override val priority: Int = 1
+ }
+diff --git a/src/main/scala/org/camunda/package.scala b/src/main/scala/org/camunda/package.scala
+index e316f15f..13ef037a 100644
+--- a/src/main/scala/org/camunda/package.scala
++++ b/src/main/scala/org/camunda/package.scala
+@@ -17,7 +17,7 @@
+ package org.camunda
+ 
+ import scala.math.BigDecimal
+-import org.slf4j.LoggerFactory
++
+ 
+ import java.time.temporal.ChronoField.{
+   DAY_OF_MONTH,
+@@ -41,7 +41,7 @@ package object feel {
+ 
+   // // common
+ 
+-  val logger = LoggerFactory.getLogger("org.camunda.feel.FeelEngine")
++  
+ 
+   // // type definitions
+ 

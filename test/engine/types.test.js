@@ -8,9 +8,12 @@ describe('Type Coercion', () => {
     expect(coerceValue('hello')).toBe('hello');
   });
 
-  it('coerces to string', () => {
-    expect(coerceValue(42, 'string')).toBe('42');
-    expect(coerceValue(true, 'string')).toBe('true');
+  it('coerces to string (Operaton-compatible)', () => {
+    // Operaton preserves FEEL result types — numbers/booleans stay as-is
+    expect(coerceValue(42, 'string')).toBe(42);
+    expect(coerceValue(true, 'string')).toBe(true);
+    // Non-number/boolean values are converted to string
+    expect(coerceValue([1, 2], 'string')).toBe('1,2');
   });
 
   it('coerces to boolean', () => {

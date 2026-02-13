@@ -17,5 +17,9 @@ coverage/
 # pre-commit
 .pre-commit-config.yaml
 
+# feel-scala Scala.js build (generated, ~6MB each)
+src/engine/feel/feel-scala-bundle.js
+src/engine/feel/main.js.map
+
 # Agents
 TODO*

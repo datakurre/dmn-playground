@@ -1,8 +1,26 @@
+/*
+ * Copyright 2025 Operaton contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 /**
- * Viewer — dmn-js integration for rendering DMN diagrams.
+ * Viewer — dmn-js integration for rendering and editing DMN diagrams.
+ *
+ * Supports toggling between a read-only Viewer and a full Modeler.
  */
 
 import DmnViewer from 'dmn-js/lib/Viewer.js';
+import DmnModeler from 'dmn-js/lib/Modeler.js';
 
 // Import dmn-js CSS
 import 'dmn-js/dist/assets/diagram-js.css';
@@ -11,17 +29,34 @@ import 'dmn-js/dist/assets/dmn-js-drd.css';
 import 'dmn-js/dist/assets/dmn-js-decision-table.css';
 import 'dmn-js/dist/assets/dmn-js-decision-table-controls.css';
 import 'dmn-js/dist/assets/dmn-font/css/dmn.css';
+import 'dmn-js/dist/assets/dmn-js-literal-expression.css';
 
 /**
- * Initialize a dmn-js viewer in the given container.
+ * Initialize a dmn-js viewer/modeler in the given container.
+ *
+ * Supports toggling between read-only (Viewer) and editable (Modeler) modes.
  *
  * @param {HTMLElement} container - DOM element to render into
- * @returns {Object} Viewer controller with load/highlightRules/clearHighlights methods
+ * @returns {Object} Controller with load/highlightRules/clearHighlights/setEditMode/saveXml methods
  */
 export function createViewer(container) {
-  const viewer = new DmnViewer({ container });
+  let viewer = new DmnViewer({ container });
+  let editMode = false;
+  let currentXml = null;
 
-  return {
+  /**
+   * Destroy the current viewer/modeler instance and create a new one.
+   */
+  function recreateInstance(useModeler) {
+    viewer.destroy();
+    if (useModeler) {
+      viewer = new DmnModeler({ container });
+    } else {
+      viewer = new DmnViewer({ container });
+    }
+  }
+
+  const ctrl = {
     /**
      * Load DMN XML into the viewer.
      *
@@ -29,6 +64,7 @@ export function createViewer(container) {
      * @returns {Promise<Object>} The parsed definitions element
      */
     async load(xml) {
+      currentXml = xml;
       const { warnings } = await viewer.importXML(xml);
       if (warnings.length > 0) {
         console.warn('DMN viewer warnings:', warnings);
@@ -204,7 +240,70 @@ export function createViewer(container) {
         // Viewer may not be in DRD mode
       }
     },
+
+    /**
+     * Whether the viewer is currently in edit mode.
+     *
+     * @returns {boolean}
+     */
+    isEditMode() {
+      return editMode;
+    },
+
+    /**
+     * Toggle between view and edit modes.
+     * Recreates the internal viewer/modeler and reloads the current XML.
+     *
+     * @param {boolean} enable - Whether to enable edit mode
+     * @returns {Promise<void>}
+     */
+    async setEditMode(enable) {
+      if (enable === editMode) return;
+
+      // When switching from edit → view, save current edits first
+      if (editMode && !enable) {
+        try {
+          const { xml } = await viewer.saveXML({ format: true });
+          currentXml = xml;
+        } catch {
+          // If save fails, keep the last known XML
+        }
+      }
+
+      editMode = enable;
+      recreateInstance(enable);
+
+      if (currentXml) {
+        await ctrl.load(currentXml);
+      }
+    },
+
+    /**
+     * Export the current DMN XML from the viewer/modeler.
+     * In edit mode, this returns the edited XML. In view mode, the original.
+     *
+     * @returns {Promise<string>} The DMN XML string
+     */
+    async saveXml() {
+      if (editMode) {
+        const { xml } = await viewer.saveXML({ format: true });
+        currentXml = xml;
+        return xml;
+      }
+      return currentXml;
+    },
+
+    /**
+     * Get the current XML (last loaded or last saved).
+     *
+     * @returns {string|null}
+     */
+    getCurrentXml() {
+      return currentXml;
+    },
   };
+
+  return ctrl;
 }
 
 /**
