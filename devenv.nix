@@ -3,10 +3,19 @@ let
   shell =
     { pkgs, ... }:
     {
+      dotenv.enable = false;
+      dotenv.disableHint = true;
+
+      languages.java.enable = true;
+      languages.java.maven.enable = true;
+
+      languages.javascript.enable = true;
+      languages.javascript.npm.enable = true;
+
       packages = [
         pkgs.gnumake
-        pkgs.nixfmt-rfc-style
-        pkgs.prettier
+        pkgs.nixfmt
+        pkgs.sbt-with-scala-native
         pkgs.treefmt
       ];
 
@@ -19,17 +28,9 @@ let
     { ... }:
     {
       devcontainer.enable = true;
-
-      languages.javascript.enable = true;
-      languages.javascript.npm.enable = true;
     };
 in
 {
-  dotenv.enable = true;
-
-  languages.javascript.enable = true;
-  languages.javascript.npm.enable = true;
-
   profiles.shell.module = {
     imports = [ shell ];
   };
