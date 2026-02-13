@@ -10,40 +10,40 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [22]
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v14
+
+      - name: Setup devenv
+        uses: cachix/cachix-action@v15
         with:
-          distribution: temurin
-          java-version: 21
-          cache: sbt
+          name: devenv
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - name: Install devenv
+        run: |
+          nix profile install --accept-flake-config github:cachix/devenv/latest
+
+      - name: Cache sbt dependencies
+        uses: actions/cache@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          path: |
+            ~/.ivy2/cache
+            ~/.sbt
+            ~/.cache/coursier
+          key: sbt-${{ hashFiles('**/build.sbt', '**/project/build.properties', '**/project/plugins.sbt') }}
+          restore-keys: |
+            sbt-
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build feel-scala Scala.js bundle
-        run: make -C feel-scala
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Run tests with coverage
-        run: npm run test:coverage
+      - name: Build with devenv
+        run: |
+          devenv shell npm ci
+          devenv shell make -C feel-scala
+          devenv shell npm run format:check
+          devenv shell npm run lint
+          devenv shell npm run test:coverage
+          devenv shell npm run build
 
       - name: Upload coverage to GitHub
         if: always()
@@ -51,6 +51,3 @@ jobs:
         with:
           name: coverage-report
           path: coverage/
-
-      - name: Build
-        run: npm run build
