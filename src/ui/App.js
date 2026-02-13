@@ -41,6 +41,8 @@ let currentModel = null;
 let viewer = null;
 let getInputValues = () => ({});
 let getOverrideValues = () => ({});
+let lastTrace = null;
+let drdOverlaysVisible = true;
 
 // ── DOM References ──────────────────────────────────────────────────
 
@@ -79,6 +81,10 @@ const compareModal = document.getElementById('compare-modal');
 const compareSummary = document.getElementById('compare-summary');
 const compareResults = document.getElementById('compare-results');
 const btnCompareClose = document.getElementById('btn-compare-close');
+const btnViewDrd = document.getElementById('btn-view-drd');
+const btnToggleOverlays = document.getElementById('btn-toggle-overlays');
+const btnResetDrd = document.getElementById('btn-reset-drd');
+const drdControls = document.getElementById('drd-controls');
 
 // ── Initialize Viewer ───────────────────────────────────────────────
 
@@ -301,6 +307,53 @@ btnEditToggle.addEventListener('click', async () => {
 
 // ── Batch Editor (inline) ───────────────────────────────────────
 
+// ── DRD Controls ────────────────────────────────────────────────
+
+/**
+ * Handle click on a decision overlay in the DRD view.
+ * Navigates to the decision table / literal expression view and highlights matched rules.
+ */
+async function handleDrdDecisionClick(decisionId, traceEntry) {
+  const success = await viewer.navigateToDecision(decisionId);
+  if (success && traceEntry.type === 'decisionTable' && traceEntry.matchedRules.length > 0) {
+    // Wait for view transition
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    viewer.highlightRules(decisionId, traceEntry.matchedRules);
+  }
+}
+
+btnViewDrd.addEventListener('click', async () => {
+  if (!lastTrace || lastTrace.length === 0) return;
+  await viewer.highlightDecisions(lastTrace, {
+    onDecisionClick: handleDrdDecisionClick,
+  });
+  drdOverlaysVisible = true;
+  btnToggleOverlays.textContent = '👁 Hide Overlays';
+});
+
+btnToggleOverlays.addEventListener('click', async () => {
+  if (!lastTrace) return;
+  drdOverlaysVisible = !drdOverlaysVisible;
+  if (drdOverlaysVisible) {
+    await viewer.highlightDecisions(lastTrace, {
+      onDecisionClick: handleDrdDecisionClick,
+    });
+    btnToggleOverlays.textContent = '👁 Hide Overlays';
+  } else {
+    viewer.clearDecisionHighlights();
+    btnToggleOverlays.textContent = '👁 Show Overlays';
+  }
+});
+
+btnResetDrd.addEventListener('click', () => {
+  viewer.clearDecisionHighlights();
+  viewer.clearHighlights();
+  lastTrace = null;
+  drdOverlaysVisible = true;
+  drdControls.classList.add('hidden');
+  btnToggleOverlays.textContent = '👁 Hide Overlays';
+});
+
 btnBatchRun.addEventListener('click', () => {
   const text = batchEditor.value.trim();
   if (!text) {
@@ -466,6 +519,8 @@ decisionSelect.addEventListener('change', () => {
     getOverrideValues = buildOverrideForm(overrideForm, currentModel, decisionId);
     viewer.clearHighlights();
     viewer.clearDecisionHighlights();
+    lastTrace = null;
+    drdControls.classList.add('hidden');
     resultOutput.textContent = 'No results yet';
     resultOutput.className = 'result-empty';
     traceOutput.textContent = '';
@@ -595,18 +650,34 @@ async function runEvaluation() {
 
     showTrace(trace);
 
+    // Store trace for DRD controls
+    lastTrace = trace;
+
     // Highlight matched rules in the decision table viewer
     if (trace && trace.length > 0) {
-      const lastTrace = trace[trace.length - 1];
-      if (lastTrace.type === 'decisionTable' && lastTrace.matchedRules.length > 0) {
-        viewer.highlightRules(lastTrace.decisionId, lastTrace.matchedRules);
-      } else {
-        viewer.clearHighlights();
-      }
+      const lastTraceEntry = trace[trace.length - 1];
 
       // For multi-decision DRG, show evaluation flow in DRD
       if (trace.length > 1) {
-        viewer.highlightDecisions(trace);
+        const autoNav = localStorage.getItem('dmn-sim-drd-auto-nav') !== 'false';
+        if (autoNav) {
+          await viewer.highlightDecisions(trace, {
+            onDecisionClick: handleDrdDecisionClick,
+          });
+        }
+        // Show DRD controls
+        drdControls.classList.remove('hidden');
+        drdOverlaysVisible = true;
+        btnToggleOverlays.textContent = '👁 Hide Overlays';
+      } else if (
+        lastTraceEntry.type === 'decisionTable' &&
+        lastTraceEntry.matchedRules.length > 0
+      ) {
+        viewer.highlightRules(lastTraceEntry.decisionId, lastTraceEntry.matchedRules);
+        drdControls.classList.add('hidden');
+      } else {
+        viewer.clearHighlights();
+        drdControls.classList.add('hidden');
       }
     }
   } catch (err) {
@@ -864,6 +935,7 @@ function showTrace(trace) {
   }
 
   const lines = [];
+  let totalDuration = 0;
   for (const entry of trace) {
     lines.push(`━━ ${entry.decisionName} (${entry.decisionId}) ━━`);
     lines.push(`  Type: ${entry.type}`);
@@ -872,16 +944,29 @@ function showTrace(trace) {
         `  Hit Policy: ${entry.hitPolicy}${entry.aggregation ? ' + ' + entry.aggregation : ''}`,
       );
     }
-    lines.push(`  Inputs: ${JSON.stringify(entry.inputValues)}`);
-    lines.push(`  Matched Rules: ${entry.matchedRules.length}`);
-    for (const rule of entry.matchedRules) {
-      lines.push(`    ✓ Rule ${rule.index + 1} (${rule.id}): ${JSON.stringify(rule.outputs)}`);
+    if (entry.type !== 'override') {
+      lines.push(`  Inputs: ${JSON.stringify(entry.inputValues)}`);
+      lines.push(`  Matched Rules: ${entry.matchedRules.length}`);
+      for (const rule of entry.matchedRules) {
+        lines.push(`    ✓ Rule ${rule.index + 1} (${rule.id}): ${JSON.stringify(rule.outputs)}`);
+      }
     }
     lines.push(`  Result: ${JSON.stringify(entry.result)}`);
+    if (entry.durationMs !== undefined) {
+      lines.push(`  Duration: ${entry.durationMs}ms`);
+      totalDuration += entry.durationMs;
+    }
     if (entry.error) {
       lines.push(`  ⚠ Error: ${entry.error}`);
     }
+    if (entry.type === 'override') {
+      lines.push('  ⚡ Value overridden (what-if)');
+    }
     lines.push('');
+  }
+
+  if (trace.length > 1 && totalDuration > 0) {
+    lines.push(`━━ Total evaluation time: ${Math.round(totalDuration * 100) / 100}ms ━━`);
   }
 
   traceOutput.textContent = lines.join('\n');

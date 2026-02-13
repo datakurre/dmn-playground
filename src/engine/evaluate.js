@@ -31,11 +31,12 @@ import { FeelinProvider } from './feel/feelin.js';
  * @typedef {Object} EvaluationTrace
  * @property {string} decisionId
  * @property {string} decisionName
- * @property {string} type - "decisionTable" or "literalExpression"
+ * @property {string} type - "decisionTable", "literalExpression", or "override"
  * @property {Object} inputValues - Evaluated input expression values
  * @property {import('./hit-policy.js').MatchedRule[]} matchedRules
  * @property {*} result
  * @property {string} [error]
+ * @property {number} [durationMs] - Evaluation time in milliseconds
  */
 
 /**
@@ -178,6 +179,7 @@ function evaluateDecisionRecursive(
  */
 function evaluateDecisionTable(decision, context, feelProvider, trace) {
   const dt = decision.logic;
+  const startTime = performance.now();
 
   // Step 1: Evaluate input expressions
   const inputValues = {};
@@ -254,6 +256,7 @@ function evaluateDecisionTable(decision, context, feelProvider, trace) {
     matchedRules,
     result: hitResult.result,
     error: hitResult.error,
+    durationMs: Math.round((performance.now() - startTime) * 100) / 100,
   });
 
   if (hitResult.error) {
@@ -288,6 +291,7 @@ function evaluateDecisionTable(decision, context, feelProvider, trace) {
  */
 function evaluateLiteralExpression(decision, context, feelProvider, trace) {
   const le = decision.logic;
+  const startTime = performance.now();
   const result = feelProvider.evaluate(le.expression, context);
 
   // Coerce to declared type
@@ -300,6 +304,7 @@ function evaluateLiteralExpression(decision, context, feelProvider, trace) {
     inputValues: context,
     matchedRules: [],
     result: coerced,
+    durationMs: Math.round((performance.now() - startTime) * 100) / 100,
   });
 
   return coerced;

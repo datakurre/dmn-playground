@@ -139,11 +139,14 @@ export function createViewer(container) {
      * Navigate to the DRD view and highlight evaluated decisions.
      *
      * Shows visual overlays on each evaluated decision node with its result
-     * and evaluation order.
+     * and evaluation order. Supports interactive click-to-navigate, what-if
+     * override indicators, and dimming of non-evaluated decisions.
      *
      * @param {import('../engine/evaluate.js').EvaluationTrace[]} trace - Evaluation trace entries
+     * @param {Object} [options]
+     * @param {Function} [options.onDecisionClick] - Callback when a decision overlay is clicked
      */
-    async highlightDecisions(trace) {
+    async highlightDecisions(trace, options = {}) {
       if (!trace || trace.length === 0) return;
 
       // Find the DRD view
@@ -164,9 +167,24 @@ export function createViewer(container) {
 
       const overlays = drdViewer.get('overlays');
       const canvas = drdViewer.get('canvas');
+      const elementRegistry = drdViewer.get('elementRegistry');
 
       // Clear previous decision highlights
       this.clearDecisionHighlights();
+
+      // Collect evaluated decision IDs for dimming non-evaluated ones
+      const evaluatedIds = new Set(trace.map((e) => e.decisionId));
+
+      // Dim non-evaluated decisions
+      elementRegistry.forEach((element) => {
+        if (element.type === 'dmn:Decision' && !evaluatedIds.has(element.id)) {
+          try {
+            canvas.addMarker(element.id, 'decision-not-evaluated');
+          } catch {
+            // Element may not support markers
+          }
+        }
+      });
 
       // Add markers and overlays for each evaluated decision
       for (let i = 0; i < trace.length; i++) {
@@ -174,13 +192,23 @@ export function createViewer(container) {
         const decisionId = entry.decisionId;
 
         try {
-          // Add CSS marker to the decision shape
-          const markerClass = entry.error ? 'decision-error' : 'decision-evaluated';
+          // Add CSS marker to the decision shape based on status
+          let markerClass;
+          if (entry.error) {
+            markerClass = 'decision-error';
+          } else if (entry.type === 'override') {
+            markerClass = 'decision-override';
+          } else {
+            markerClass = 'decision-evaluated';
+          }
           canvas.addMarker(decisionId, markerClass);
 
           // Add order number overlay
           const orderHtml = document.createElement('div');
           orderHtml.className = 'decision-order-badge';
+          if (entry.type === 'override') {
+            orderHtml.classList.add('override');
+          }
           orderHtml.textContent = String(i + 1);
           orderHtml.title = `Step ${i + 1}: ${entry.decisionName}`;
 
@@ -189,22 +217,81 @@ export function createViewer(container) {
             html: orderHtml,
           });
 
-          // Add result overlay
+          // Add result overlay (clickable)
           const resultHtml = document.createElement('div');
-          resultHtml.className = entry.error
-            ? 'decision-result-overlay error'
-            : 'decision-result-overlay';
-          const resultText =
-            entry.type === 'override'
-              ? `⚡ ${formatOverlayResult(entry.result)}`
-              : formatOverlayResult(entry.result);
-          resultHtml.textContent = resultText;
-          resultHtml.title = JSON.stringify(entry.result, null, 2);
+          const isError = !!entry.error;
+          const isOverride = entry.type === 'override';
+
+          // Determine CSS class
+          let overlayClass = 'decision-result-overlay';
+          if (isError) overlayClass += ' error';
+          else if (isOverride) overlayClass += ' override';
+          else if (entry.type === 'literalExpression') overlayClass += ' literal';
+
+          resultHtml.className = overlayClass;
+
+          // Build content
+          const typeIcon = isOverride
+            ? '⚡'
+            : isError
+              ? '❌'
+              : entry.type === 'literalExpression'
+                ? '𝑓'
+                : '▦';
+          const resultText = formatOverlayResult(entry.result);
+          resultHtml.textContent = `${typeIcon} ${resultText}`;
+
+          // Duration suffix
+          if (entry.durationMs !== undefined) {
+            const durationSpan = document.createElement('span');
+            durationSpan.className = 'decision-duration';
+            durationSpan.textContent = ` ${entry.durationMs}ms`;
+            resultHtml.appendChild(durationSpan);
+          }
+
+          // Tooltip with full detail
+          const tooltipLines = [
+            `Decision: ${entry.decisionName} (${entry.decisionId})`,
+            `Type: ${entry.type}`,
+            `Result: ${JSON.stringify(entry.result, null, 2)}`,
+          ];
+          if (entry.inputValues && Object.keys(entry.inputValues).length > 0) {
+            tooltipLines.push(`Inputs: ${JSON.stringify(entry.inputValues, null, 2)}`);
+          }
+          if (entry.durationMs !== undefined) {
+            tooltipLines.push(`Duration: ${entry.durationMs}ms`);
+          }
+          if (entry.error) {
+            tooltipLines.push(`Error: ${entry.error}`);
+          }
+          resultHtml.title = tooltipLines.join('\n');
+
+          // Click handler — navigate to the decision table/expression view
+          if (options.onDecisionClick) {
+            resultHtml.style.cursor = 'pointer';
+            resultHtml.addEventListener('click', (e) => {
+              e.stopPropagation();
+              options.onDecisionClick(entry.decisionId, entry);
+            });
+          }
 
           overlays.add(decisionId, 'evaluation-result', {
             position: { bottom: -8, left: 0 },
             html: resultHtml,
           });
+
+          // Error detail overlay for failed decisions
+          if (isError) {
+            const errorHtml = document.createElement('div');
+            errorHtml.className = 'decision-error-detail';
+            errorHtml.textContent = entry.error;
+            errorHtml.title = entry.error;
+
+            overlays.add(decisionId, 'evaluation-error', {
+              position: { bottom: -28, left: 0 },
+              html: errorHtml,
+            });
+          }
         } catch {
           // Element may not exist in the DRD — skip silently
         }
@@ -226,12 +313,15 @@ export function createViewer(container) {
         // Remove overlays
         overlays.remove({ type: 'evaluation-order' });
         overlays.remove({ type: 'evaluation-result' });
+        overlays.remove({ type: 'evaluation-error' });
 
         // Remove markers from all elements
         elementRegistry.forEach((element) => {
           try {
             canvas.removeMarker(element.id, 'decision-evaluated');
             canvas.removeMarker(element.id, 'decision-error');
+            canvas.removeMarker(element.id, 'decision-override');
+            canvas.removeMarker(element.id, 'decision-not-evaluated');
           } catch {
             // Ignore errors for elements without markers
           }
@@ -248,6 +338,58 @@ export function createViewer(container) {
      */
     isEditMode() {
       return editMode;
+    },
+
+    /**
+     * Check if the current view is the DRD view.
+     *
+     * @returns {boolean}
+     */
+    isDrdView() {
+      try {
+        const activeViewer = viewer.getActiveViewer();
+        if (!activeViewer) return false;
+        // If we can get the canvas, we're likely in DRD view
+        activeViewer.get('canvas');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    /**
+     * Navigate to a specific decision's view (decision table or literal expression).
+     *
+     * @param {string} decisionId - The decision element ID to navigate to
+     * @returns {Promise<boolean>} Whether navigation succeeded
+     */
+    async navigateToDecision(decisionId) {
+      const views = viewer.getViews();
+      const decisionView = views.find(
+        (v) =>
+          v.element?.id === decisionId &&
+          (v.type === 'decisionTable' || v.type === 'literalExpression'),
+      );
+      if (decisionView) {
+        await viewer.open(decisionView);
+        return true;
+      }
+      return false;
+    },
+
+    /**
+     * Navigate to the DRD (overview) view.
+     *
+     * @returns {Promise<boolean>} Whether navigation succeeded
+     */
+    async navigateToDrd() {
+      const views = viewer.getViews();
+      const drdView = views.find((v) => v.type === 'drd');
+      if (drdView) {
+        await viewer.open(drdView);
+        return true;
+      }
+      return false;
     },
 
     /**
