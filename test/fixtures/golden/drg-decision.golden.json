@@ -1,0 +1,42 @@
+{
+  "description": "Golden-file tests for drg-decision.dmn (DRG with cascading evaluation)",
+  "fixture": "drg-decision.dmn",
+  "decisionId": "decision_rate",
+  "cases": [
+    {
+      "name": "low income → high risk → 15.0",
+      "input": { "income": 20000 },
+      "expected": 15.0
+    },
+    {
+      "name": "medium income → medium risk → 10.0",
+      "input": { "income": 50000 },
+      "expected": 10.0
+    },
+    {
+      "name": "high income → low risk → 5.0",
+      "input": { "income": 100000 },
+      "expected": 5.0
+    },
+    {
+      "name": "boundary 30000 — inside [30000..70000] → medium → 10.0",
+      "input": { "income": 30000 },
+      "expected": 10.0
+    },
+    {
+      "name": "boundary 70000 — inside [30000..70000] → medium → 10.0",
+      "input": { "income": 70000 },
+      "expected": 10.0
+    },
+    {
+      "name": "just below 30000 → high risk → 15.0",
+      "input": { "income": 29999 },
+      "expected": 15.0
+    },
+    {
+      "name": "just above 70000 → low risk → 5.0",
+      "input": { "income": 70001 },
+      "expected": 5.0
+    }
+  ]
+}

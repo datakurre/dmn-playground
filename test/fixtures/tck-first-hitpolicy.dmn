@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TCK-inspired: FIRST hit policy (compliance-level-2, 0108-first-hitpolicy) -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_first"
+             name="First Hit Policy"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_status" name="Employment Status">
+    <decisionTable id="dt_status" hitPolicy="FIRST">
+      <input id="input_age" label="Age">
+        <inputExpression id="ie_age" typeRef="integer">
+          <text>age</text>
+        </inputExpression>
+      </input>
+      <input id="input_years" label="Years of Service">
+        <inputExpression id="ie_years" typeRef="integer">
+          <text>yearsOfService</text>
+        </inputExpression>
+      </input>
+      <output id="output_status" label="Status" name="status" typeRef="string" />
+      <!-- Rule 1: Senior employee (age >= 60 AND service >= 20) -->
+      <rule id="rule_senior">
+        <inputEntry id="ie_sr_age"><text><![CDATA[>= 60]]></text></inputEntry>
+        <inputEntry id="ie_sr_years"><text><![CDATA[>= 20]]></text></inputEntry>
+        <outputEntry id="oe_senior"><text>"Senior"</text></outputEntry>
+      </rule>
+      <!-- Rule 2: Experienced (any age, service >= 10) -->
+      <rule id="rule_experienced">
+        <inputEntry id="ie_exp_age"><text>-</text></inputEntry>
+        <inputEntry id="ie_exp_years"><text><![CDATA[>= 10]]></text></inputEntry>
+        <outputEntry id="oe_experienced"><text>"Experienced"</text></outputEntry>
+      </rule>
+      <!-- Rule 3: Junior (any age, service < 10) -->
+      <rule id="rule_junior">
+        <inputEntry id="ie_jr_age"><text>-</text></inputEntry>
+        <inputEntry id="ie_jr_years"><text><![CDATA[< 10]]></text></inputEntry>
+        <outputEntry id="oe_junior"><text>"Junior"</text></outputEntry>
+      </rule>
+      <!-- Rule 4: Default / catch-all -->
+      <rule id="rule_default">
+        <inputEntry id="ie_def_age"><text>-</text></inputEntry>
+        <inputEntry id="ie_def_years"><text>-</text></inputEntry>
+        <outputEntry id="oe_default"><text>"Unknown"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

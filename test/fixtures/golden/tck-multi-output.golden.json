@@ -1,0 +1,37 @@
+{
+  "description": "Golden-file tests for tck-multi-output.dmn (multi-output, FIRST hit policy)",
+  "fixture": "tck-multi-output.dmn",
+  "decisionId": "decision_shipping",
+  "cases": [
+    {
+      "name": "heavy international → freight, 50.0",
+      "input": { "weight": 30, "destination": "international" },
+      "expected": { "method": "freight", "cost": 50.0 }
+    },
+    {
+      "name": "heavy domestic → ground, 15.0",
+      "input": { "weight": 25, "destination": "domestic" },
+      "expected": { "method": "ground", "cost": 15.0 }
+    },
+    {
+      "name": "light international → air, 25.0",
+      "input": { "weight": 10, "destination": "international" },
+      "expected": { "method": "air", "cost": 25.0 }
+    },
+    {
+      "name": "light domestic → standard, 5.0",
+      "input": { "weight": 5, "destination": "domestic" },
+      "expected": { "method": "standard", "cost": 5.0 }
+    },
+    {
+      "name": "boundary 20kg international → air (<=20)",
+      "input": { "weight": 20, "destination": "international" },
+      "expected": { "method": "air", "cost": 25.0 }
+    },
+    {
+      "name": "boundary 21kg domestic → ground (>20)",
+      "input": { "weight": 21, "destination": "domestic" },
+      "expected": { "method": "ground", "cost": 15.0 }
+    }
+  ]
+}

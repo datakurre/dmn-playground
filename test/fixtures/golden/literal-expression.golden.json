@@ -1,0 +1,32 @@
+{
+  "description": "Golden-file tests for literal-expression.dmn (price * quantity * (1 - discountRate))",
+  "fixture": "literal-expression.dmn",
+  "decisionId": "decision_calc",
+  "cases": [
+    {
+      "name": "basic calculation — 100 * 5 * 0.9 = 450",
+      "input": { "price": 100, "quantity": 5, "discountRate": 0.1 },
+      "expected": 450
+    },
+    {
+      "name": "no discount — 50 * 10 * 1.0 = 500",
+      "input": { "price": 50, "quantity": 10, "discountRate": 0 },
+      "expected": 500
+    },
+    {
+      "name": "full discount — 100 * 5 * 0.0 = 0",
+      "input": { "price": 100, "quantity": 5, "discountRate": 1 },
+      "expected": 0
+    },
+    {
+      "name": "20% discount — 50 * 10 * 0.8 = 400",
+      "input": { "price": 50, "quantity": 10, "discountRate": 0.2 },
+      "expected": 400
+    },
+    {
+      "name": "single item — 200 * 1 * 0.95 = 190",
+      "input": { "price": 200, "quantity": 1, "discountRate": 0.05 },
+      "expected": 190
+    }
+  ]
+}

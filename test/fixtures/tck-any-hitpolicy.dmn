@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TCK-inspired: ANY hit policy (compliance-level-2, 0105-any-hitpolicy) -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_any"
+             name="Any Hit Policy"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_approval" name="Loan Approval">
+    <decisionTable id="dt_approval" hitPolicy="ANY">
+      <input id="input_score" label="Credit Score">
+        <inputExpression id="ie_score" typeRef="integer">
+          <text>creditScore</text>
+        </inputExpression>
+      </input>
+      <input id="input_income" label="Annual Income">
+        <inputExpression id="ie_income" typeRef="integer">
+          <text>annualIncome</text>
+        </inputExpression>
+      </input>
+      <output id="output_approved" label="Approved" name="approved" typeRef="boolean" />
+      <!-- Both rules below yield true when score >= 700 AND income >= 50000 -->
+      <rule id="rule_by_score">
+        <inputEntry id="ie_score_high"><text><![CDATA[>= 700]]></text></inputEntry>
+        <inputEntry id="ie_income_any"><text>-</text></inputEntry>
+        <outputEntry id="oe_approved_score"><text>true</text></outputEntry>
+      </rule>
+      <rule id="rule_by_income">
+        <inputEntry id="ie_score_any"><text>-</text></inputEntry>
+        <inputEntry id="ie_income_high"><text><![CDATA[>= 50000]]></text></inputEntry>
+        <outputEntry id="oe_approved_income"><text>true</text></outputEntry>
+      </rule>
+      <!-- Reject: low score AND low income -->
+      <rule id="rule_reject">
+        <inputEntry id="ie_score_low"><text><![CDATA[< 600]]></text></inputEntry>
+        <inputEntry id="ie_income_low"><text><![CDATA[< 30000]]></text></inputEntry>
+        <outputEntry id="oe_rejected"><text>false</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

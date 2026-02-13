@@ -1,0 +1,46 @@
+{
+  "name": "dmn-simulator",
+  "version": "0.1.0",
+  "description": "Standalone browser-based DMN simulator compatible with Operaton/Camunda 7",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./engine": "./src/engine/evaluate.js",
+    "./parser": "./src/parser/parse.js",
+    "./feel": "./src/engine/feel/index.js"
+  },
+  "files": [
+    "src/engine/",
+    "src/parser/",
+    "src/index.js"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint --max-warnings 0 src/ test/",
+    "format": "prettier --write 'src/**/*.js' 'test/**/*.js'",
+    "format:check": "prettier --check 'src/**/*.js' 'test/**/*.js'"
+  },
+  "keywords": ["dmn", "decision", "simulator", "operaton", "camunda", "feel"],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "camunda-dmn-moddle": "^1.3.1",
+    "dmn-js": "^17.6.0",
+    "dmn-moddle": "^12.0.1",
+    "feelin": "^6.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.3.0",
+    "prettier": "^3.8.1",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  }
+}

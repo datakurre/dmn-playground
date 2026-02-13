@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Standalone browser-based DMN simulator compatible with Operaton/Camunda 7" />
+    <meta name="theme-color" content="#2563eb" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+    <title>DMN Simulator</title>
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="header">
+        <h1>DMN Simulator</h1>
+        <p>Operaton/Camunda 7 compatible DMN evaluation in the browser</p>
+      </header>
+
+      <div id="toolbar">
+        <button id="btn-load" title="Load DMN file">📂 Load DMN</button>
+        <button id="btn-sample" title="Load sample DMN">📋 Sample</button>
+        <button id="btn-evaluate" title="Evaluate decision" disabled>▶ Evaluate</button>
+        <select id="decision-select" disabled>
+          <option value="">— Select decision —</option>
+        </select>
+        <span class="toolbar-spacer"></span>
+        <button id="btn-batch" title="Batch evaluate with CSV/JSON" disabled>📊 Batch</button>
+        <button id="btn-share" title="Copy shareable URL" disabled>🔗 Share</button>
+        <button id="btn-export" title="Export test data as JSON" disabled>💾 Export</button>
+        <button id="btn-import" title="Import test data from JSON">📥 Import</button>
+        <button id="btn-theme" title="Toggle dark/light theme">🌙 Dark</button>
+      </div>
+
+      <div id="main">
+        <div id="viewer-panel">
+          <div id="dmn-viewer"></div>
+          <div id="drop-zone" class="drop-zone">
+            <p>Drop a DMN file here<br/>or click <strong>Load DMN</strong></p>
+          </div>
+        </div>
+
+        <div id="side-panel">
+          <div id="input-panel">
+            <h3>Input Data</h3>
+            <form id="input-form">
+              <p class="hint">Load a DMN file to see inputs</p>
+            </form>
+            <div id="override-form"></div>
+          </div>
+
+          <div id="result-panel">
+            <h3>Result</h3>
+            <pre id="result-output" class="result-empty">No results yet</pre>
+          </div>
+
+          <div id="trace-panel">
+            <h3>Evaluation Trace</h3>
+            <pre id="trace-output"></pre>
+          </div>
+        </div>
+      </div>
+
+      <input type="file" id="file-input" accept=".dmn,.xml" hidden />
+      <input type="file" id="import-input" accept=".json" hidden />
+      <input type="file" id="batch-input" accept=".csv,.json" hidden />
+
+      <!-- Batch results modal -->
+      <div id="batch-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Batch Evaluation Results</h3>
+            <button id="btn-batch-close" class="modal-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="batch-summary"></div>
+            <div id="batch-results" class="batch-results"></div>
+          </div>
+          <div class="modal-footer">
+            <button id="btn-batch-download">💾 Download Results (JSON)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/ui/App.js"></script>
+  </body>
+</html>

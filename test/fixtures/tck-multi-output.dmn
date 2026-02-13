@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TCK-inspired: Multi-output decision table with COLLECT (compliance-level-2) -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_multi_output"
+             name="Multi Output Decision"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_shipping" name="Shipping Rules">
+    <decisionTable id="dt_shipping" hitPolicy="FIRST">
+      <input id="input_weight" label="Weight (kg)">
+        <inputExpression id="ie_weight" typeRef="double">
+          <text>weight</text>
+        </inputExpression>
+      </input>
+      <input id="input_destination" label="Destination">
+        <inputExpression id="ie_destination" typeRef="string">
+          <text>destination</text>
+        </inputExpression>
+      </input>
+      <output id="output_method" label="Method" name="method" typeRef="string" />
+      <output id="output_cost" label="Cost" name="cost" typeRef="double" />
+      <!-- Heavy international -->
+      <rule id="rule_heavy_intl">
+        <inputEntry id="ie_hi_weight"><text><![CDATA[> 20]]></text></inputEntry>
+        <inputEntry id="ie_hi_dest"><text>"international"</text></inputEntry>
+        <outputEntry id="oe_hi_method"><text>"freight"</text></outputEntry>
+        <outputEntry id="oe_hi_cost"><text>50.0</text></outputEntry>
+      </rule>
+      <!-- Heavy domestic -->
+      <rule id="rule_heavy_dom">
+        <inputEntry id="ie_hd_weight"><text><![CDATA[> 20]]></text></inputEntry>
+        <inputEntry id="ie_hd_dest"><text>"domestic"</text></inputEntry>
+        <outputEntry id="oe_hd_method"><text>"ground"</text></outputEntry>
+        <outputEntry id="oe_hd_cost"><text>15.0</text></outputEntry>
+      </rule>
+      <!-- Light international -->
+      <rule id="rule_light_intl">
+        <inputEntry id="ie_li_weight"><text><![CDATA[<= 20]]></text></inputEntry>
+        <inputEntry id="ie_li_dest"><text>"international"</text></inputEntry>
+        <outputEntry id="oe_li_method"><text>"air"</text></outputEntry>
+        <outputEntry id="oe_li_cost"><text>25.0</text></outputEntry>
+      </rule>
+      <!-- Light domestic -->
+      <rule id="rule_light_dom">
+        <inputEntry id="ie_ld_weight"><text><![CDATA[<= 20]]></text></inputEntry>
+        <inputEntry id="ie_ld_dest"><text>"domestic"</text></inputEntry>
+        <outputEntry id="oe_ld_method"><text>"standard"</text></outputEntry>
+        <outputEntry id="oe_ld_cost"><text>5.0</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

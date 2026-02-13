@@ -1,0 +1,57 @@
+{
+  "description": "Golden-file tests for collect-sum-decision.dmn (COLLECT+SUM hit policy)",
+  "fixture": "collect-sum-decision.dmn",
+  "decisionId": "decision_discount",
+  "cases": [
+    {
+      "name": "VIP with large order — 10 + 5 = 15",
+      "input": { "customerType": "VIP", "orderAmount": 2000 },
+      "expected": 15
+    },
+    {
+      "name": "VIP with huge order — 10 + 5 + 3 = 18",
+      "input": { "customerType": "VIP", "orderAmount": 6000 },
+      "expected": 18
+    },
+    {
+      "name": "VIP with small order — only VIP discount 10",
+      "input": { "customerType": "VIP", "orderAmount": 500 },
+      "expected": 10
+    },
+    {
+      "name": "Regular with large order — only large order 5",
+      "input": { "customerType": "Regular", "orderAmount": 2000 },
+      "expected": 5
+    },
+    {
+      "name": "Regular with huge order — 5 + 3 = 8",
+      "input": { "customerType": "Regular", "orderAmount": 6000 },
+      "expected": 8
+    },
+    {
+      "name": "Regular with small order — no rules match, sum=0",
+      "input": { "customerType": "Regular", "orderAmount": 500 },
+      "expected": 0
+    },
+    {
+      "name": "VIP at boundary 1000 — only VIP discount (1000 not > 1000)",
+      "input": { "customerType": "VIP", "orderAmount": 1000 },
+      "expected": 10
+    },
+    {
+      "name": "VIP just above 1000 — VIP + large order = 15",
+      "input": { "customerType": "VIP", "orderAmount": 1001 },
+      "expected": 15
+    },
+    {
+      "name": "VIP at boundary 5000 — VIP + large order = 15 (5000 not > 5000)",
+      "input": { "customerType": "VIP", "orderAmount": 5000 },
+      "expected": 15
+    },
+    {
+      "name": "VIP just above 5000 — VIP + large + huge = 18",
+      "input": { "customerType": "VIP", "orderAmount": 5001 },
+      "expected": 18
+    }
+  ]
+}

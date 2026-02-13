@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TCK-inspired: RULE ORDER hit policy (compliance-level-2, 0110-ruleorder-hitpolicy) -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_ruleorder"
+             name="Rule Order Hit Policy"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_tags" name="Customer Tags">
+    <decisionTable id="dt_tags" hitPolicy="RULE ORDER">
+      <input id="input_age" label="Age">
+        <inputExpression id="ie_age" typeRef="integer">
+          <text>age</text>
+        </inputExpression>
+      </input>
+      <input id="input_spend" label="Annual Spend">
+        <inputExpression id="ie_spend" typeRef="double">
+          <text>annualSpend</text>
+        </inputExpression>
+      </input>
+      <output id="output_tag" label="Tag" name="tag" typeRef="string" />
+      <!-- Tags are assigned in table order; multiple can match -->
+      <rule id="rule_young">
+        <inputEntry id="ie_young"><text><![CDATA[< 30]]></text></inputEntry>
+        <inputEntry id="ie_young_spend"><text>-</text></inputEntry>
+        <outputEntry id="oe_young"><text>"young"</text></outputEntry>
+      </rule>
+      <rule id="rule_big_spender">
+        <inputEntry id="ie_bs_age"><text>-</text></inputEntry>
+        <inputEntry id="ie_bs_spend"><text><![CDATA[> 10000]]></text></inputEntry>
+        <outputEntry id="oe_big_spender"><text>"big-spender"</text></outputEntry>
+      </rule>
+      <rule id="rule_senior">
+        <inputEntry id="ie_senior"><text><![CDATA[>= 60]]></text></inputEntry>
+        <inputEntry id="ie_senior_spend"><text>-</text></inputEntry>
+        <outputEntry id="oe_senior"><text>"senior"</text></outputEntry>
+      </rule>
+      <rule id="rule_everyone">
+        <inputEntry id="ie_all_age"><text>-</text></inputEntry>
+        <inputEntry id="ie_all_spend"><text>-</text></inputEntry>
+        <outputEntry id="oe_everyone"><text>"customer"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

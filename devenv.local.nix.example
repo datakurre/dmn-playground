@@ -1,0 +1,24 @@
+{
+  profiles.devcontainer.module = {
+    devcontainer.tweaks = [
+      "podman"
+      "vscode"
+      "gpg-agent"
+    ];
+    devcontainer.settings.customizations.vscode.extensions = [
+      "GitHub.copilot"
+      "GitHub.copilot-chat"
+      "bbenoist.Nix"
+      "mkhl.direnv"
+      "ms-vscode.makefile-tools"
+      "redhat.java"
+      "visualstudioexptteam.vscodeintellicode"
+      "vscjava.vscode-java-debug"
+      "vscjava.vscode-java-dependency"
+      "vscjava.vscode-java-pack"
+      "vscjava.vscode-java-test"
+      "vscjava.vscode-maven"
+      "vscodevim.vim"
+    ];
+  };
+}

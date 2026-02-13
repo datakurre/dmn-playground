@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_collect"
+             name="Collect Decision"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_discount" name="Discount Rules">
+    <decisionTable id="dt_discount" hitPolicy="COLLECT" aggregation="SUM">
+      <input id="input_customer" label="Customer Type">
+        <inputExpression id="ie_customer" typeRef="string">
+          <text>customerType</text>
+        </inputExpression>
+      </input>
+      <input id="input_amount" label="Order Amount">
+        <inputExpression id="ie_amount" typeRef="double">
+          <text>orderAmount</text>
+        </inputExpression>
+      </input>
+      <output id="output_discount" label="Discount" name="discount" typeRef="double" />
+      <rule id="rule_vip">
+        <inputEntry id="ie_vip"><text>"VIP"</text></inputEntry>
+        <inputEntry id="ie_vip_amount"><text>-</text></inputEntry>
+        <outputEntry id="oe_vip"><text>10</text></outputEntry>
+      </rule>
+      <rule id="rule_large_order">
+        <inputEntry id="ie_large_customer"><text>-</text></inputEntry>
+        <inputEntry id="ie_large_amount"><text><![CDATA[> 1000]]></text></inputEntry>
+        <outputEntry id="oe_large"><text>5</text></outputEntry>
+      </rule>
+      <rule id="rule_huge_order">
+        <inputEntry id="ie_huge_customer"><text>-</text></inputEntry>
+        <inputEntry id="ie_huge_amount"><text><![CDATA[> 5000]]></text></inputEntry>
+        <outputEntry id="oe_huge"><text>3</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

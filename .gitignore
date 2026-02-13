@@ -1,0 +1,21 @@
+.idea/
+
+# Devenv
+.devenv*
+.devcontainer.json
+devenv.local.nix
+
+# direnv
+.direnv
+.vscode/
+
+# Node.js
+node_modules/
+dist/
+coverage/
+
+# pre-commit
+.pre-commit-config.yaml
+
+# Agents
+TODO*

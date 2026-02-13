@@ -1,0 +1,37 @@
+{
+  "description": "Golden-file tests for tck-first-hitpolicy.dmn (FIRST hit policy)",
+  "fixture": "tck-first-hitpolicy.dmn",
+  "decisionId": "decision_status",
+  "cases": [
+    {
+      "name": "senior — age 65, service 25 → Senior (first rule matches)",
+      "input": { "age": 65, "yearsOfService": 25 },
+      "expected": "Senior"
+    },
+    {
+      "name": "experienced — age 35, service 15 → Experienced",
+      "input": { "age": 35, "yearsOfService": 15 },
+      "expected": "Experienced"
+    },
+    {
+      "name": "junior — age 25, service 3 → Junior",
+      "input": { "age": 25, "yearsOfService": 3 },
+      "expected": "Junior"
+    },
+    {
+      "name": "senior boundary — age 60, service 20 → Senior",
+      "input": { "age": 60, "yearsOfService": 20 },
+      "expected": "Senior"
+    },
+    {
+      "name": "experienced wins over junior — age 60, service 10",
+      "input": { "age": 60, "yearsOfService": 10 },
+      "expected": "Experienced"
+    },
+    {
+      "name": "default — age 50, service 0 → Junior (< 10 matches before default)",
+      "input": { "age": 50, "yearsOfService": 0 },
+      "expected": "Junior"
+    }
+  ]
+}

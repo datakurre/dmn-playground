@@ -1,0 +1,47 @@
+{
+  "description": "Golden-file tests for tck-ruleorder-hitpolicy.dmn (RULE ORDER hit policy)",
+  "fixture": "tck-ruleorder-hitpolicy.dmn",
+  "decisionId": "decision_tags",
+  "cases": [
+    {
+      "name": "young big-spender — age 25, spend 15000",
+      "input": { "age": 25, "annualSpend": 15000 },
+      "expected": ["young", "big-spender", "customer"]
+    },
+    {
+      "name": "senior — age 65, spend 5000",
+      "input": { "age": 65, "annualSpend": 5000 },
+      "expected": ["senior", "customer"]
+    },
+    {
+      "name": "only customer — age 40, spend 5000",
+      "input": { "age": 40, "annualSpend": 5000 },
+      "expected": ["customer"]
+    },
+    {
+      "name": "all tags for young big-spender — age 25, spend 20000",
+      "input": { "age": 25, "annualSpend": 20000 },
+      "expected": ["young", "big-spender", "customer"]
+    },
+    {
+      "name": "senior big-spender — age 65, spend 15000",
+      "input": { "age": 65, "annualSpend": 15000 },
+      "expected": ["big-spender", "senior", "customer"]
+    },
+    {
+      "name": "young boundary — age 29, spend 5000",
+      "input": { "age": 29, "annualSpend": 5000 },
+      "expected": ["young", "customer"]
+    },
+    {
+      "name": "not young — age 30, spend 5000",
+      "input": { "age": 30, "annualSpend": 5000 },
+      "expected": ["customer"]
+    },
+    {
+      "name": "senior boundary — age 60, spend 5000",
+      "input": { "age": 60, "annualSpend": 5000 },
+      "expected": ["senior", "customer"]
+    }
+  ]
+}

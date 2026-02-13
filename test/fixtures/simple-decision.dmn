@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_simple"
+             name="Simple Decision"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_age" name="Age Category">
+    <decisionTable id="dt_age" hitPolicy="UNIQUE">
+      <input id="input_age" label="Age">
+        <inputExpression id="ie_age" typeRef="integer">
+          <text>age</text>
+        </inputExpression>
+      </input>
+      <output id="output_category" label="Category" name="category" typeRef="string" />
+      <rule id="rule_child">
+        <inputEntry id="ie_child"><text><![CDATA[< 13]]></text></inputEntry>
+        <outputEntry id="oe_child"><text>"child"</text></outputEntry>
+      </rule>
+      <rule id="rule_teen">
+        <inputEntry id="ie_teen"><text>[13..17]</text></inputEntry>
+        <outputEntry id="oe_teen"><text>"teenager"</text></outputEntry>
+      </rule>
+      <rule id="rule_adult">
+        <inputEntry id="ie_adult"><text><![CDATA[>= 18]]></text></inputEntry>
+        <outputEntry id="oe_adult"><text>"adult"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

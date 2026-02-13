@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_drg"
+             name="DRG Test"
+             namespace="http://camunda.org/schema/1.0/dmn">
+
+  <!-- First decision: determine risk level -->
+  <decision id="decision_risk" name="Risk Level">
+    <decisionTable id="dt_risk" hitPolicy="UNIQUE">
+      <input id="input_income" label="Income">
+        <inputExpression id="ie_income" typeRef="double">
+          <text>income</text>
+        </inputExpression>
+      </input>
+      <output id="output_risk" label="Risk" name="risk" typeRef="string" />
+      <rule id="rule_high_risk">
+        <inputEntry id="ie_low_income"><text><![CDATA[< 30000]]></text></inputEntry>
+        <outputEntry id="oe_high_risk"><text>"high"</text></outputEntry>
+      </rule>
+      <rule id="rule_medium_risk">
+        <inputEntry id="ie_mid_income"><text>[30000..70000]</text></inputEntry>
+        <outputEntry id="oe_medium_risk"><text>"medium"</text></outputEntry>
+      </rule>
+      <rule id="rule_low_risk">
+        <inputEntry id="ie_high_income"><text><![CDATA[> 70000]]></text></inputEntry>
+        <outputEntry id="oe_low_risk"><text>"low"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <!-- Second decision: depends on Risk Level -->
+  <decision id="decision_rate" name="Interest Rate">
+    <informationRequirement id="ir_risk">
+      <requiredDecision href="#decision_risk" />
+    </informationRequirement>
+    <decisionTable id="dt_rate" hitPolicy="UNIQUE">
+      <input id="input_risk_level" label="Risk Level">
+        <inputExpression id="ie_risk_level" typeRef="string">
+          <text>Risk Level</text>
+        </inputExpression>
+      </input>
+      <output id="output_rate" label="Rate" name="rate" typeRef="double" />
+      <rule id="rule_high_rate">
+        <inputEntry id="ie_high"><text>"high"</text></inputEntry>
+        <outputEntry id="oe_rate_high"><text>15.0</text></outputEntry>
+      </rule>
+      <rule id="rule_medium_rate">
+        <inputEntry id="ie_medium"><text>"medium"</text></inputEntry>
+        <outputEntry id="oe_rate_medium"><text>10.0</text></outputEntry>
+      </rule>
+      <rule id="rule_low_rate">
+        <inputEntry id="ie_low"><text>"low"</text></inputEntry>
+        <outputEntry id="oe_rate_low"><text>5.0</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

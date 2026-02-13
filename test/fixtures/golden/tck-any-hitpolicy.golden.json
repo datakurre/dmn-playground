@@ -1,0 +1,37 @@
+{
+  "description": "Golden-file tests for tck-any-hitpolicy.dmn (ANY hit policy)",
+  "fixture": "tck-any-hitpolicy.dmn",
+  "decisionId": "decision_approval",
+  "cases": [
+    {
+      "name": "both criteria met — score 750, income 60000 → true",
+      "input": { "creditScore": 750, "annualIncome": 60000 },
+      "expected": true
+    },
+    {
+      "name": "score only — score 750, income 20000 → true",
+      "input": { "creditScore": 750, "annualIncome": 20000 },
+      "expected": true
+    },
+    {
+      "name": "income only — score 500, income 60000 → true",
+      "input": { "creditScore": 500, "annualIncome": 60000 },
+      "expected": true
+    },
+    {
+      "name": "reject — score 450, income 25000 → false",
+      "input": { "creditScore": 450, "annualIncome": 25000 },
+      "expected": false
+    },
+    {
+      "name": "score boundary 700 — score 700, income 20000 → true",
+      "input": { "creditScore": 700, "annualIncome": 20000 },
+      "expected": true
+    },
+    {
+      "name": "income boundary 50000 — score 500, income 50000 → true",
+      "input": { "creditScore": 500, "annualIncome": 50000 },
+      "expected": true
+    }
+  ]
+}

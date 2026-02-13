@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="definitions_literal"
+             name="Literal Expression Test"
+             namespace="http://camunda.org/schema/1.0/dmn">
+  <decision id="decision_calc" name="Calculate Total">
+    <variable id="var_total" name="total" typeRef="double" />
+    <literalExpression id="le_calc" typeRef="double">
+      <text>price * quantity * (1 - discountRate)</text>
+    </literalExpression>
+  </decision>
+</definitions>

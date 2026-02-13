@@ -1,0 +1,57 @@
+{
+  "description": "Golden-file tests for simple-decision.dmn (UNIQUE hit policy, age → category)",
+  "fixture": "simple-decision.dmn",
+  "decisionId": "decision_age",
+  "cases": [
+    {
+      "name": "child — age 5",
+      "input": { "age": 5 },
+      "expected": "child"
+    },
+    {
+      "name": "child — age 0",
+      "input": { "age": 0 },
+      "expected": "child"
+    },
+    {
+      "name": "child — age 12",
+      "input": { "age": 12 },
+      "expected": "child"
+    },
+    {
+      "name": "teenager — age 13 (boundary)",
+      "input": { "age": 13 },
+      "expected": "teenager"
+    },
+    {
+      "name": "teenager — age 15",
+      "input": { "age": 15 },
+      "expected": "teenager"
+    },
+    {
+      "name": "teenager — age 17 (boundary)",
+      "input": { "age": 17 },
+      "expected": "teenager"
+    },
+    {
+      "name": "adult — age 18 (boundary)",
+      "input": { "age": 18 },
+      "expected": "adult"
+    },
+    {
+      "name": "adult — age 30",
+      "input": { "age": 30 },
+      "expected": "adult"
+    },
+    {
+      "name": "adult — age 65",
+      "input": { "age": 65 },
+      "expected": "adult"
+    },
+    {
+      "name": "child — negative age",
+      "input": { "age": -1 },
+      "expected": "child"
+    }
+  ]
+}
