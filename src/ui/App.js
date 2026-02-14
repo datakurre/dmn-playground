@@ -116,6 +116,7 @@ let getInputValues = () => ({});
 let getOverrideValues = () => ({});
 let lastTrace = null;
 let drdOverlaysVisible = true;
+let dataFlowVisible = false;
 let animationController = null;
 
 // ── DOM References ──────────────────────────────────────────────────
@@ -159,6 +160,7 @@ const btnCompareClose = document.getElementById('btn-compare-close');
 const btnViewDrd = document.getElementById('btn-view-drd');
 const btnToggleOverlays = document.getElementById('btn-toggle-overlays');
 const btnResetDrd = document.getElementById('btn-reset-drd');
+const btnToggleDataflow = document.getElementById('btn-toggle-dataflow');
 const drdControls = document.getElementById('drd-controls');
 const btnTraceJson = document.getElementById('btn-trace-json');
 const btnTraceCsv = document.getElementById('btn-trace-csv');
@@ -458,6 +460,21 @@ btnResetDrd.addEventListener('click', () => {
   drdControls.classList.add('hidden');
   btnToggleOverlays.textContent = '👁 Hide Overlays';
   btnZoomEvaluated.classList.add('hidden');
+  dataFlowVisible = false;
+  btnToggleDataflow.textContent = '🔗 Data Flow';
+  btnToggleDataflow.classList.add('hidden');
+});
+
+btnToggleDataflow.addEventListener('click', () => {
+  if (!lastTrace || !currentModel) return;
+  dataFlowVisible = !dataFlowVisible;
+  if (dataFlowVisible) {
+    viewer.showDataFlow(lastTrace, currentModel);
+    btnToggleDataflow.textContent = '🔗 Hide Flow';
+  } else {
+    viewer.clearDataFlow();
+    btnToggleDataflow.textContent = '🔗 Data Flow';
+  }
 });
 
 // ── Animation Controls ──────────────────────────────────────────
@@ -979,6 +996,10 @@ async function runEvaluation() {
         drdControls.classList.remove('hidden');
         drdOverlaysVisible = true;
         btnToggleOverlays.textContent = '👁 Hide Overlays';
+        // Show data flow toggle
+        btnToggleDataflow.classList.remove('hidden');
+        dataFlowVisible = false;
+        btnToggleDataflow.textContent = '🔗 Data Flow';
         // Show zoom-to-evaluated button
         btnZoomEvaluated.classList.remove('hidden');
         // Show animation controls
@@ -990,10 +1011,12 @@ async function runEvaluation() {
       ) {
         viewer.highlightRules(lastTraceEntry.decisionId, lastTraceEntry.matchedRules);
         drdControls.classList.add('hidden');
+        btnToggleDataflow.classList.add('hidden');
         stopAnimation();
       } else {
         viewer.clearHighlights();
         drdControls.classList.add('hidden');
+        btnToggleDataflow.classList.add('hidden');
         stopAnimation();
       }
     }

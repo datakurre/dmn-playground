@@ -640,6 +640,7 @@ export function createViewer(container) {
         overlays.remove({ type: 'evaluation-order' });
         overlays.remove({ type: 'evaluation-result' });
         overlays.remove({ type: 'evaluation-error' });
+        overlays.remove({ type: 'data-flow' });
 
         // Remove markers from all elements
         elementRegistry.forEach((element) => {
@@ -763,6 +764,105 @@ export function createViewer(container) {
     },
 
     /**
+     * Show data flow annotations on connections between evaluated decisions.
+     *
+     * Finds the DRD connections (information requirements) between decisions
+     * in the trace and adds overlay labels showing the value passed along
+     * each connection.
+     *
+     * @param {import('../engine/evaluate.js').EvaluationTrace[]} trace - Evaluation trace entries
+     * @param {import('../parser/parse.js').DmnModel} model - Parsed DMN model
+     * @param {Object} [options]
+     * @param {Function} [options.onConnectionHover] - Callback when a connection label is hovered
+     */
+    showDataFlow(trace, model, options = {}) {
+      if (!trace || trace.length === 0 || !model) return;
+
+      const drdViewer = viewer.getActiveViewer();
+      if (!drdViewer) return;
+
+      let overlays, elementRegistry;
+      try {
+        overlays = drdViewer.get('overlays');
+        elementRegistry = drdViewer.get('elementRegistry');
+      } catch {
+        return;
+      }
+
+      // Clear previous data flow overlays
+      this.clearDataFlow();
+
+      // Build a map of decisionId → trace entry for quick lookup
+      const traceMap = new Map();
+      for (const entry of trace) {
+        traceMap.set(entry.decisionId, entry);
+      }
+
+      // For each decision in the trace, look at its information requirements
+      // and add a label on the connection showing the value passed
+      for (const entry of trace) {
+        const decision = model.decisions.get(entry.decisionId);
+        if (!decision) continue;
+
+        for (const reqId of decision.informationRequirements) {
+          const reqEntry = traceMap.get(reqId);
+          if (!reqEntry) continue;
+
+          // Find the connection element between the required decision and this one
+          const connection = findConnection(elementRegistry, reqId, entry.decisionId);
+          if (!connection) continue;
+
+          // Format the value passed
+          const valueText = formatOverlayResult(reqEntry.result);
+
+          // Create overlay label
+          const labelHtml = document.createElement('div');
+          labelHtml.className = 'data-flow-label';
+          labelHtml.textContent = valueText;
+          labelHtml.title = `${reqEntry.decisionName} → ${entry.decisionName}: ${JSON.stringify(reqEntry.result, null, 2)}`;
+          labelHtml.setAttribute('role', 'img');
+          labelHtml.setAttribute(
+            'aria-label',
+            `Data flow from ${reqEntry.decisionName} to ${entry.decisionName}: ${valueText}`,
+          );
+
+          // Highlight related decisions on hover
+          if (options.onConnectionHover) {
+            labelHtml.addEventListener('mouseenter', () => {
+              options.onConnectionHover(reqId, entry.decisionId, true);
+            });
+            labelHtml.addEventListener('mouseleave', () => {
+              options.onConnectionHover(reqId, entry.decisionId, false);
+            });
+          }
+
+          try {
+            overlays.add(connection.id, 'data-flow', {
+              position: { top: 0, left: 0 },
+              html: labelHtml,
+            });
+          } catch {
+            // Connection may not support overlays
+          }
+        }
+      }
+    },
+
+    /**
+     * Remove all data flow overlays.
+     */
+    clearDataFlow() {
+      try {
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return;
+        const overlays = drdViewer.get('overlays');
+        overlays.remove({ type: 'data-flow' });
+      } catch {
+        // Viewer may not be in DRD mode
+      }
+    },
+
+    /**
      * Whether the viewer is currently in edit mode.
      *
      * @returns {boolean}
@@ -877,6 +977,29 @@ export function createViewer(container) {
   };
 
   return ctrl;
+}
+
+/**
+ * Find a connection element between two decisions in the element registry.
+ *
+ * @param {Object} elementRegistry - diagram-js element registry
+ * @param {string} sourceId - Source decision ID
+ * @param {string} targetId - Target decision ID
+ * @returns {Object|null} The connection element, or null if not found
+ */
+function findConnection(elementRegistry, sourceId, targetId) {
+  let found = null;
+  elementRegistry.forEach((element) => {
+    if (found) return;
+    if (
+      element.type === 'dmn:InformationRequirement' &&
+      element.source?.id === sourceId &&
+      element.target?.id === targetId
+    ) {
+      found = element;
+    }
+  });
+  return found;
 }
 
 export { formatOverlayResult };

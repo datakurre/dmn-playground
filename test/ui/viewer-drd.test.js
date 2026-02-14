@@ -1136,3 +1136,406 @@ describe('animateDecisions', () => {
     expect(animCtrl.isPlaying()).toBe(false);
   });
 });
+
+// ── showDataFlow ────────────────────────────────────────────────────
+
+describe('showDataFlow', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  function makeModel(decisions) {
+    const map = new Map();
+    for (const d of decisions) {
+      map.set(d.id, {
+        id: d.id,
+        name: d.name || d.id,
+        informationRequirements: d.requires || [],
+        logic: { type: 'decisionTable' },
+      });
+    }
+    return { id: 'model', name: 'Test', namespace: '', decisions: map };
+  }
+
+  function withConnection(sourceId, targetId, connectionId) {
+    const conn = {
+      id: connectionId || `${sourceId}_${targetId}`,
+      type: 'dmn:InformationRequirement',
+      source: { id: sourceId },
+      target: { id: targetId },
+    };
+    const original = mockElementRegistry.forEach;
+    mockElementRegistry.forEach = vi.fn((fn) => {
+      if (original.getMockImplementation()) {
+        original.getMockImplementation()(fn);
+      }
+      fn(conn);
+    });
+    return conn;
+  }
+
+  // --- Guard clauses ---
+
+  it('returns for null trace', () => {
+    ctrl.showDataFlow(null, makeModel([]));
+    expect(mockOverlays.add).not.toHaveBeenCalled();
+  });
+
+  it('returns for empty trace', () => {
+    ctrl.showDataFlow([], makeModel([]));
+    expect(mockOverlays.add).not.toHaveBeenCalled();
+  });
+
+  it('returns for null model', () => {
+    ctrl.showDataFlow(makeTrace([{ decisionId: 'a' }]), null);
+    expect(mockOverlays.add).not.toHaveBeenCalled();
+  });
+
+  it('returns when no active viewer', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    const model = makeModel([{ id: 'a' }]);
+    ctrl.showDataFlow(makeTrace([{ decisionId: 'a' }]), model);
+    expect(mockOverlays.add).not.toHaveBeenCalled();
+  });
+
+  it('returns when overlays service throws', () => {
+    mockActiveViewer.get.mockImplementation((name) => {
+      if (name === 'overlays') throw new Error('No overlays');
+      return mockElementRegistry;
+    });
+    const model = makeModel([{ id: 'a' }]);
+    expect(() => ctrl.showDataFlow(makeTrace([{ decisionId: 'a' }]), model)).not.toThrow();
+  });
+
+  // --- Data flow overlay creation ---
+
+  it('adds data-flow overlay on connection between decisions', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([
+      { id: 'a', name: 'Decision A' },
+      { id: 'b', name: 'Decision B', requires: ['a'] },
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', decisionName: 'Decision A', result: 42 },
+      { decisionId: 'b', decisionName: 'Decision B', result: 'yes' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    expect(flowCalls).toHaveLength(1);
+    expect(flowCalls[0][0]).toBe('conn_ab');
+  });
+
+  it('label shows the result value from the source decision', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([
+      { id: 'a', name: 'Decision A' },
+      { id: 'b', name: 'Decision B', requires: ['a'] },
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', decisionName: 'Decision A', result: 42 },
+      { decisionId: 'b', decisionName: 'Decision B', result: 'yes' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    expect(html.textContent).toBe('42');
+  });
+
+  it('label has data-flow-label CSS class', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 'test' },
+      { decisionId: 'b', result: 'out' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    expect(html.className).toBe('data-flow-label');
+  });
+
+  it('label has ARIA attributes', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([
+      { id: 'a', name: 'Decision A' },
+      { id: 'b', name: 'Decision B', requires: ['a'] },
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', decisionName: 'Decision A', result: 42 },
+      { decisionId: 'b', decisionName: 'Decision B', result: 'yes' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    expect(html.getAttribute('role')).toBe('img');
+    expect(html.getAttribute('aria-label')).toContain('Decision A');
+    expect(html.getAttribute('aria-label')).toContain('Decision B');
+  });
+
+  it('label has tooltip with full detail', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([
+      { id: 'a', name: 'Decision A' },
+      { id: 'b', name: 'Decision B', requires: ['a'] },
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', decisionName: 'Decision A', result: { rating: 'A+' } },
+      { decisionId: 'b', decisionName: 'Decision B', result: 'yes' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    expect(html.title).toContain('Decision A');
+    expect(html.title).toContain('Decision B');
+    expect(html.title).toContain('rating');
+  });
+
+  it('does not add overlay when connection is not found', () => {
+    // No connection registered
+    mockElementRegistry.forEach = vi.fn(() => {});
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 42 },
+      { decisionId: 'b', result: 'yes' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    expect(flowCalls).toHaveLength(0);
+  });
+
+  it('does not add overlay when required decision is not in trace', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    // Only 'b' is in the trace, not 'a'
+    const trace = makeTrace([{ decisionId: 'b', result: 'yes' }]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    expect(flowCalls).toHaveLength(0);
+  });
+
+  it('handles multiple connections in a chain', () => {
+    // a -> b -> c
+    const connAB = {
+      id: 'conn_ab',
+      type: 'dmn:InformationRequirement',
+      source: { id: 'a' },
+      target: { id: 'b' },
+    };
+    const connBC = {
+      id: 'conn_bc',
+      type: 'dmn:InformationRequirement',
+      source: { id: 'b' },
+      target: { id: 'c' },
+    };
+    mockElementRegistry.forEach = vi.fn((fn) => {
+      fn(connAB);
+      fn(connBC);
+    });
+
+    const model = makeModel([
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B', requires: ['a'] },
+      { id: 'c', name: 'C', requires: ['b'] },
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', decisionName: 'A', result: 10 },
+      { decisionId: 'b', decisionName: 'B', result: 20 },
+      { decisionId: 'c', decisionName: 'C', result: 30 },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    expect(flowCalls).toHaveLength(2);
+    expect(flowCalls[0][0]).toBe('conn_ab');
+    expect(flowCalls[1][0]).toBe('conn_bc');
+  });
+
+  it('handles diamond dependency pattern', () => {
+    // a -> c, b -> c
+    const connAC = {
+      id: 'conn_ac',
+      type: 'dmn:InformationRequirement',
+      source: { id: 'a' },
+      target: { id: 'c' },
+    };
+    const connBC = {
+      id: 'conn_bc',
+      type: 'dmn:InformationRequirement',
+      source: { id: 'b' },
+      target: { id: 'c' },
+    };
+    mockElementRegistry.forEach = vi.fn((fn) => {
+      fn(connAC);
+      fn(connBC);
+    });
+
+    const model = makeModel([
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B' },
+      { id: 'c', name: 'C', requires: ['a', 'b'] },
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', decisionName: 'A', result: 1 },
+      { decisionId: 'b', decisionName: 'B', result: 2 },
+      { decisionId: 'c', decisionName: 'C', result: 3 },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    expect(flowCalls).toHaveLength(2);
+  });
+
+  it('clears previous data-flow overlays before adding new ones', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 1 },
+      { decisionId: 'b', result: 2 },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    expect(mockOverlays.remove).toHaveBeenCalledWith({ type: 'data-flow' });
+  });
+
+  it('handles overlays.add throwing gracefully', () => {
+    withConnection('a', 'b', 'conn_ab');
+    mockOverlays.add.mockImplementation(() => {
+      throw new Error('Cannot add overlay');
+    });
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 1 },
+      { decisionId: 'b', result: 2 },
+    ]);
+
+    expect(() => ctrl.showDataFlow(trace, model)).not.toThrow();
+  });
+
+  it('calls onConnectionHover on mouseenter', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const onHover = vi.fn();
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 1 },
+      { decisionId: 'b', result: 2 },
+    ]);
+
+    ctrl.showDataFlow(trace, model, { onConnectionHover: onHover });
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    html.dispatchEvent(new Event('mouseenter'));
+    expect(onHover).toHaveBeenCalledWith('a', 'b', true);
+  });
+
+  it('calls onConnectionHover on mouseleave', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const onHover = vi.fn();
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 1 },
+      { decisionId: 'b', result: 2 },
+    ]);
+
+    ctrl.showDataFlow(trace, model, { onConnectionHover: onHover });
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    html.dispatchEvent(new Event('mouseleave'));
+    expect(onHover).toHaveBeenCalledWith('a', 'b', false);
+  });
+
+  it('shows null result as ∅', () => {
+    withConnection('a', 'b', 'conn_ab');
+    const model = makeModel([{ id: 'a' }, { id: 'b', requires: ['a'] }]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: null },
+      { decisionId: 'b', result: 'out' },
+    ]);
+
+    ctrl.showDataFlow(trace, model);
+
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    const html = flowCalls[0][2].html;
+    expect(html.textContent).toBe('∅');
+  });
+
+  it('skips decisions not in the model', () => {
+    const model = makeModel([
+      { id: 'a' },
+      // 'b' is NOT in the model
+    ]);
+    const trace = makeTrace([
+      { decisionId: 'a', result: 1 },
+      { decisionId: 'b', result: 2 },
+    ]);
+
+    expect(() => ctrl.showDataFlow(trace, model)).not.toThrow();
+    const flowCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'data-flow');
+    expect(flowCalls).toHaveLength(0);
+  });
+});
+
+// ── clearDataFlow ───────────────────────────────────────────────────
+
+describe('clearDataFlow', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('removes data-flow overlay type', () => {
+    ctrl.clearDataFlow();
+    expect(mockOverlays.remove).toHaveBeenCalledWith({ type: 'data-flow' });
+  });
+
+  it('handles null activeViewer gracefully', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.clearDataFlow()).not.toThrow();
+  });
+
+  it('handles overlays.remove throwing', () => {
+    mockOverlays.remove.mockImplementation(() => {
+      throw new Error('No overlays');
+    });
+    expect(() => ctrl.clearDataFlow()).not.toThrow();
+  });
+});
+
+// ── clearDecisionHighlights also clears data-flow ───────────────────
+
+describe('clearDecisionHighlights data-flow cleanup', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('removes data-flow overlays along with other overlay types', () => {
+    ctrl.clearDecisionHighlights();
+    expect(mockOverlays.remove).toHaveBeenCalledWith({ type: 'data-flow' });
+  });
+});

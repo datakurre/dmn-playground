@@ -65,6 +65,38 @@ Click on any decision's result overlay to navigate to its decision table
 or literal expression view. If the decision is a table with matched rules,
 those rules will be highlighted.
 
+## Data Flow Visualization
+
+After evaluation, click the **🔗 Data Flow** button to display value annotations
+on the connections (arrows) between decisions. Each label shows the value passed
+from one decision to the next.
+
+### How It Works
+
+- Each arrow (information requirement) between decisions gets a small label
+  showing the output value of the upstream decision
+- Hover over a label to see the full value detail in a tooltip
+- Labels expand on hover to show truncated values
+- Click **🔗 Hide Flow** to remove the labels
+
+### Reading Data Flow
+
+| Label | Meaning |
+|-------|---------|
+| `42` | Numeric value passed |
+| `"Gold"` | String value passed |
+| `∅` | Null/undefined value |
+| `{"a":1}` | Object value (truncated if long) |
+
+### Use Cases
+
+- **Trace data through the graph**: See exactly what value each decision
+  produced and passed to its dependents
+- **Debug unexpected results**: When a decision produces the wrong output,
+  check the values it received from upstream decisions
+- **Understand the model**: Quickly see the data dependencies without
+  clicking through each decision individually
+
 ### Trace Table Synchronization
 
 The **Evaluation Trace** table below the diagram is synchronized with the DRD:

@@ -569,6 +569,47 @@ td.matched-rule {
   white-space: nowrap;
 }
 
+/* ── Data Flow Labels ────────────────────────────────────────────── */
+
+.data-flow-label {
+  background: var(--accent);
+  color: white;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+  cursor: default;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.data-flow-label:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  max-width: none;
+  overflow: visible;
+}
+
+[data-theme='dark'] .data-flow-label {
+  background: var(--accent);
+  color: #f3f4f6;
+}
+
+[data-high-contrast='true'] .data-flow-label {
+  border: 2px solid #000;
+  font-weight: 600;
+}
+
+[data-high-contrast='true'][data-theme='dark'] .data-flow-label {
+  border-color: #fff;
+}
+
 /* ── DRD Control Panel ───────────────────────────────────────────── */
 
 .drd-controls {
