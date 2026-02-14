@@ -22,7 +22,7 @@
 
 export { parseDmnXml } from './parser/parse.js';
 export { evaluateDecision } from './engine/evaluate.js';
-export { evaluateBatch, parseCSV } from './engine/batch.js';
+export { evaluateBatch, parseCSV, aggregateBatchResults } from './engine/batch.js';
 export { compareModels } from './engine/compare.js';
 export { resolveEvaluationOrder, getDependencies } from './engine/drg.js';
 export { applyHitPolicy } from './engine/hit-policy.js';

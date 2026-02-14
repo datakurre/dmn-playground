@@ -81,6 +81,142 @@ export function parseCSV(csvText) {
 }
 
 /**
+ * @typedef {Object} DecisionAggregate
+ * @property {string} decisionId - Decision ID
+ * @property {string} decisionName - Decision display name
+ * @property {string} type - "decisionTable", "literalExpression", or "override"
+ * @property {number} evaluatedCount - Number of batch rows where this decision was evaluated
+ * @property {number} errorCount - Number of batch rows where this decision had errors
+ * @property {Map<number, number>} ruleMatchFrequency - Map of rule index → match count (decision tables only)
+ * @property {number} totalRules - Total number of rules in the decision table (0 for non-tables)
+ * @property {number[]} unmatchedRules - Rule indices that never matched across all batch rows
+ */
+
+/**
+ * @typedef {Object} BatchAggregation
+ * @property {number} totalRows - Total number of batch input rows
+ * @property {number} successRows - Number of rows that evaluated without error
+ * @property {number} failedRows - Number of rows that had errors
+ * @property {DecisionAggregate[]} decisions - Per-decision aggregation data
+ */
+
+/**
+ * Aggregate batch evaluation results into a DRD summary.
+ *
+ * Produces per-decision statistics across all batch rows: evaluation counts,
+ * error counts, and rule match frequency heatmaps for decision tables.
+ *
+ * @param {BatchRow[]} batchResults - Results from evaluateBatch()
+ * @returns {BatchAggregation}
+ */
+export function aggregateBatchResults(batchResults) {
+  if (!batchResults || batchResults.length === 0) {
+    return { totalRows: 0, successRows: 0, failedRows: 0, decisions: [] };
+  }
+
+  const totalRows = batchResults.length;
+  const successRows = batchResults.filter((r) => !r.error).length;
+  const failedRows = totalRows - successRows;
+
+  // Accumulate per-decision stats across all batch rows
+  // Key: decisionId, Value: accumulated stats
+  const decisionMap = new Map();
+
+  for (const row of batchResults) {
+    if (!row.trace) continue;
+
+    for (const entry of row.trace) {
+      let agg = decisionMap.get(entry.decisionId);
+      if (!agg) {
+        agg = {
+          decisionId: entry.decisionId,
+          decisionName: entry.decisionName,
+          type: entry.type,
+          evaluatedCount: 0,
+          errorCount: 0,
+          ruleMatchFrequency: new Map(),
+          totalRules: 0,
+        };
+        decisionMap.set(entry.decisionId, agg);
+      }
+
+      agg.evaluatedCount++;
+
+      if (entry.error) {
+        agg.errorCount++;
+      }
+
+      // Track rule match frequency for decision tables
+      if (entry.matchedRules && entry.matchedRules.length > 0) {
+        for (const rule of entry.matchedRules) {
+          const idx = rule.index;
+          agg.ruleMatchFrequency.set(idx, (agg.ruleMatchFrequency.get(idx) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  // Determine total rules per decision table from the first trace that has them,
+  // and compute unmatched rules
+  for (const row of batchResults) {
+    if (!row.trace) continue;
+    for (const entry of row.trace) {
+      const agg = decisionMap.get(entry.decisionId);
+      if (!agg || agg.totalRules > 0) continue;
+
+      // For decision tables, the hitPolicy presence indicates a table
+      if (entry.type === 'decisionTable' && entry.hitPolicy) {
+        // Count total rules from the trace — we can infer from maximal rule index
+        // plus any info we have. Use matchedRules across all rows.
+        // We'll set totalRules after the loop below.
+      }
+    }
+  }
+
+  // Second pass: determine totalRules by scanning all rule indices across all rows
+  for (const row of batchResults) {
+    if (!row.trace) continue;
+    for (const entry of row.trace) {
+      const agg = decisionMap.get(entry.decisionId);
+      if (!agg) continue;
+      if (entry.matchedRules) {
+        for (const rule of entry.matchedRules) {
+          if (rule.index + 1 > agg.totalRules) {
+            agg.totalRules = rule.index + 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Build final decisions array with unmatchedRules
+  const decisions = [];
+  for (const agg of decisionMap.values()) {
+    const unmatchedRules = [];
+    if (agg.type === 'decisionTable' && agg.totalRules > 0) {
+      for (let i = 0; i < agg.totalRules; i++) {
+        if (!agg.ruleMatchFrequency.has(i)) {
+          unmatchedRules.push(i);
+        }
+      }
+    }
+
+    decisions.push({
+      decisionId: agg.decisionId,
+      decisionName: agg.decisionName,
+      type: agg.type,
+      evaluatedCount: agg.evaluatedCount,
+      errorCount: agg.errorCount,
+      ruleMatchFrequency: agg.ruleMatchFrequency,
+      totalRules: agg.totalRules,
+      unmatchedRules,
+    });
+  }
+
+  return { totalRows, successRows, failedRows, decisions };
+}
+
+/**
  * Parse a single CSV line, respecting quoted fields.
  *
  * @param {string} line - A single CSV line

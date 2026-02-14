@@ -18,6 +18,9 @@ order and visualizes the entire evaluation flow on the DRD diagram.
 3. **Fill in the input data** in the auto-generated form
 4. **Click Evaluate** (or press `Ctrl+Enter`)
 
+<!-- Screenshot: DRD overview after loading a multi-decision DMN model -->
+![DRD Overview](../screenshots/drd-overview.png)
+
 The playground will:
 - Resolve all decision dependencies (topological sort)
 - Evaluate each decision in order, passing outputs forward
@@ -42,6 +45,9 @@ Below each decision node, a **result overlay** shows:
 
 The overlay displays a compact representation of the result value.
 Hover over it for full details including inputs, outputs, and duration.
+
+<!-- Screenshot: DRD with evaluation overlays showing order badges, result values, and color coding -->
+![DRD Evaluation Overlays](../screenshots/drd-evaluation-overlays.png)
 
 ### Color Coding
 
@@ -70,6 +76,9 @@ those rules will be highlighted.
 After evaluation, click the **🔗 Data Flow** button to display value annotations
 on the connections (arrows) between decisions. Each label shows the value passed
 from one decision to the next.
+
+<!-- Screenshot: DRD with data flow labels on connections between decisions -->
+![Data Flow Visualization](../screenshots/drd-data-flow.png)
 
 ### How It Works
 
@@ -133,12 +142,30 @@ for upstream decisions, bypassing their actual evaluation. This is useful for
 2. Enter a value for any upstream decision
 3. Evaluate — the overridden decision shows an ⚡ icon in the DRD
 
+<!-- Screenshot: DRD showing an overridden decision with the ⚡ icon -->
+![What-If Override](../screenshots/drd-override.png)
+
 ## Trace Export
 
 Export the evaluation trace for external analysis:
 
 - **📋 JSON** — Full trace with all metadata (inputs, outputs, timing, errors)
 - **📋 CSV** — Tabular format for spreadsheet import
+
+## Batch Evaluation Summary
+
+When running batch evaluations (multiple input rows), the engine aggregates
+results across all rows to provide a DRD-level summary:
+
+- **Per-decision evaluation count** — how many batch rows triggered each decision
+- **Rule match frequency (heatmap)** — how often each rule matched across all rows
+- **Unmatched rules** — rules that never fired in any batch row (potential dead rules)
+- **Error frequency** — how many batch rows caused errors in each decision
+
+This data can be used to identify:
+- **Hot paths** — decisions and rules that fire most frequently
+- **Dead rules** — rules that never match for any input combination
+- **Error-prone decisions** — decisions that consistently fail
 
 ## Keyboard Shortcuts
 

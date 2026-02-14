@@ -4,7 +4,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { parseDmnXml } from '../../src/parser/parse.js';
-import { evaluateBatch, parseCSV } from '../../src/engine/batch.js';
+import { evaluateBatch, parseCSV, aggregateBatchResults } from '../../src/engine/batch.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtures = resolve(__dirname, '../fixtures');
@@ -171,5 +171,189 @@ describe('CSV Parsing', () => {
     const csv = 'val\nnull';
     const rows = parseCSV(csv);
     expect(rows[0].val).toBe(null);
+  });
+});
+
+describe('aggregateBatchResults', () => {
+  it('returns empty summary for null input', () => {
+    const agg = aggregateBatchResults(null);
+    expect(agg.totalRows).toBe(0);
+    expect(agg.successRows).toBe(0);
+    expect(agg.failedRows).toBe(0);
+    expect(agg.decisions).toEqual([]);
+  });
+
+  it('returns empty summary for empty array', () => {
+    const agg = aggregateBatchResults([]);
+    expect(agg.totalRows).toBe(0);
+    expect(agg.decisions).toEqual([]);
+  });
+
+  it('counts total, success, and failed rows', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    const rows = [{ age: 10 }, { age: 20 }, { age: 15 }];
+    const results = evaluateBatch(model, 'decision_age', rows);
+
+    const agg = aggregateBatchResults(results);
+
+    expect(agg.totalRows).toBe(3);
+    expect(agg.successRows).toBe(3);
+    expect(agg.failedRows).toBe(0);
+  });
+
+  it('counts failed rows from error results', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    const rows = [{ age: 10 }];
+    // Evaluate against a non-existent decision to produce errors
+    const results = evaluateBatch(model, 'nonexistent', rows);
+
+    const agg = aggregateBatchResults(results);
+
+    expect(agg.totalRows).toBe(1);
+    expect(agg.failedRows).toBe(1);
+    expect(agg.successRows).toBe(0);
+  });
+
+  it('aggregates per-decision evaluation counts', async () => {
+    const model = await parseDmnXml(loadFixture('drg-decision.dmn'));
+    const rows = [{ income: 20000 }, { income: 50000 }, { income: 80000 }];
+    const results = evaluateBatch(model, 'decision_rate', rows);
+
+    const agg = aggregateBatchResults(results);
+
+    // DRG has two decisions: decision_risk and decision_rate
+    expect(agg.decisions).toHaveLength(2);
+
+    const riskAgg = agg.decisions.find((d) => d.decisionId === 'decision_risk');
+    const rateAgg = agg.decisions.find((d) => d.decisionId === 'decision_rate');
+
+    expect(riskAgg).toBeDefined();
+    expect(rateAgg).toBeDefined();
+
+    // Each decision should be evaluated once per batch row
+    expect(riskAgg.evaluatedCount).toBe(3);
+    expect(rateAgg.evaluatedCount).toBe(3);
+  });
+
+  it('tracks rule match frequency (heatmap)', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    // age < 13 → child (rule 0), [13..17] → teenager (rule 1), >= 18 → adult (rule 2)
+    const rows = [
+      { age: 5 }, // rule 0
+      { age: 10 }, // rule 0
+      { age: 15 }, // rule 1
+      { age: 25 }, // rule 2
+      { age: 30 }, // rule 2
+      { age: 35 }, // rule 2
+    ];
+    const results = evaluateBatch(model, 'decision_age', rows);
+    const agg = aggregateBatchResults(results);
+
+    expect(agg.decisions).toHaveLength(1);
+    const dec = agg.decisions[0];
+
+    expect(dec.ruleMatchFrequency.get(0)).toBe(2); // child matched 2 times
+    expect(dec.ruleMatchFrequency.get(1)).toBe(1); // teenager matched 1 time
+    expect(dec.ruleMatchFrequency.get(2)).toBe(3); // adult matched 3 times
+  });
+
+  it('identifies unmatched rules', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    // Only trigger rule 0 (child) — rules 1 and 2 are never matched
+    const rows = [{ age: 5 }, { age: 8 }, { age: 12 }];
+    const results = evaluateBatch(model, 'decision_age', rows);
+    const agg = aggregateBatchResults(results);
+
+    const dec = agg.decisions[0];
+
+    // Only rule index 0 was matched
+    expect(dec.ruleMatchFrequency.has(0)).toBe(true);
+    expect(dec.ruleMatchFrequency.has(1)).toBe(false);
+    expect(dec.ruleMatchFrequency.has(2)).toBe(false);
+
+    // totalRules is determined from the max matched index + 1
+    // Since only rule 0 matched, totalRules = 1
+    // unmatchedRules within the known range
+    expect(dec.unmatchedRules).toEqual([]);
+  });
+
+  it('tracks unmatched rules across all matched indices', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    // Trigger rule 0 and rule 2, but not rule 1
+    const rows = [
+      { age: 5 }, // rule 0
+      { age: 25 }, // rule 2
+    ];
+    const results = evaluateBatch(model, 'decision_age', rows);
+    const agg = aggregateBatchResults(results);
+
+    const dec = agg.decisions[0];
+
+    expect(dec.totalRules).toBe(3); // max index is 2, so 3 rules known
+    expect(dec.unmatchedRules).toEqual([1]); // rule 1 never matched
+  });
+
+  it('preserves decision type information', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    const rows = [{ age: 10 }];
+    const results = evaluateBatch(model, 'decision_age', rows);
+    const agg = aggregateBatchResults(results);
+
+    expect(agg.decisions[0].type).toBe('decisionTable');
+  });
+
+  it('tracks error count per decision', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    const rows = [{ age: 10 }];
+    const results = evaluateBatch(model, 'decision_age', rows);
+    const agg = aggregateBatchResults(results);
+
+    expect(agg.decisions[0].errorCount).toBe(0);
+  });
+
+  it('aggregates DRG decisions with rule frequency across decisions', async () => {
+    const model = await parseDmnXml(loadFixture('drg-decision.dmn'));
+    const rows = [
+      { income: 20000 }, // risk: high → rate: 15.0
+      { income: 50000 }, // risk: medium → rate: 10.0
+      { income: 80000 }, // risk: low → rate: 5.0
+      { income: 10000 }, // risk: high → rate: 15.0
+    ];
+    const results = evaluateBatch(model, 'decision_rate', rows);
+    const agg = aggregateBatchResults(results);
+
+    const riskAgg = agg.decisions.find((d) => d.decisionId === 'decision_risk');
+
+    // rule 0 (high risk) matched 2 times, rule 1 (medium) 1 time, rule 2 (low) 1 time
+    expect(riskAgg.ruleMatchFrequency.get(0)).toBe(2);
+    expect(riskAgg.ruleMatchFrequency.get(1)).toBe(1);
+    expect(riskAgg.ruleMatchFrequency.get(2)).toBe(1);
+  });
+
+  it('handles rows with missing trace gracefully', () => {
+    const results = [
+      { index: 0, inputData: {}, result: null, trace: undefined, error: 'bad' },
+      { index: 1, inputData: {}, result: null, trace: [], error: 'bad' },
+    ];
+    const agg = aggregateBatchResults(results);
+
+    expect(agg.totalRows).toBe(2);
+    expect(agg.failedRows).toBe(2);
+    expect(agg.decisions).toEqual([]);
+  });
+
+  it('handles overrides in trace entries', async () => {
+    const model = await parseDmnXml(loadFixture('drg-decision.dmn'));
+    const rows = [{ income: 20000 }];
+    const results = evaluateBatch(model, 'decision_rate', rows, {
+      overrides: { decision_risk: 'low' },
+    });
+    const agg = aggregateBatchResults(results);
+
+    const riskAgg = agg.decisions.find((d) => d.decisionId === 'decision_risk');
+    expect(riskAgg.type).toBe('override');
+    expect(riskAgg.evaluatedCount).toBe(1);
+    // Overrides have no matched rules
+    expect(riskAgg.ruleMatchFrequency.size).toBe(0);
   });
 });
