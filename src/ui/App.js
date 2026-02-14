@@ -36,6 +36,77 @@ import { SAMPLE_DMN } from './sample-dmn.js';
 import { createBlankDmn } from './blank-dmn.js';
 import { traceToJson, traceToCSV, downloadFile } from './trace-export.js';
 
+// ── Accessibility: Focus Trapping ───────────────────────────────────
+
+/**
+ * Trap keyboard focus within a modal dialog element.
+ * Returns a cleanup function to remove the event listener.
+ *
+ * @param {HTMLElement} modal - The modal container element
+ * @returns {Function} cleanup - Removes the focus trap
+ */
+function trapFocus(modal) {
+  function handler(e) {
+    if (e.key === 'Tab') {
+      const focusable = modal.querySelectorAll(
+        'button:not([disabled]), [href], input:not([hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+  }
+  modal.addEventListener('keydown', handler);
+  return () => modal.removeEventListener('keydown', handler);
+}
+
+/** Track active focus traps for cleanup */
+let activeModalCleanup = null;
+
+/**
+ * Open a modal with focus management.
+ *
+ * @param {HTMLElement} modal - The modal element
+ * @param {HTMLElement} [focusTarget] - Element to focus when modal opens
+ */
+function openModal(modal, focusTarget) {
+  modal.classList.remove('hidden');
+  activeModalCleanup = trapFocus(modal);
+  // Focus the close button or specified target after a tick
+  setTimeout(() => {
+    const target = focusTarget || modal.querySelector('.modal-close');
+    if (target) target.focus();
+  }, 50);
+}
+
+/**
+ * Close a modal and restore focus.
+ *
+ * @param {HTMLElement} modal - The modal element
+ * @param {HTMLElement} [returnFocus] - Element to return focus to
+ */
+function closeModal(modal, returnFocus) {
+  modal.classList.add('hidden');
+  if (activeModalCleanup) {
+    activeModalCleanup();
+    activeModalCleanup = null;
+  }
+  if (returnFocus) returnFocus.focus();
+}
+
 // ── State ───────────────────────────────────────────────────────────
 
 let currentXml = null;
@@ -276,7 +347,7 @@ batchInput.addEventListener('change', async (e) => {
 });
 
 btnBatchClose.addEventListener('click', () => {
-  batchModal.classList.add('hidden');
+  closeModal(batchModal, btnBatch);
 });
 
 btnBatchDownload.addEventListener('click', () => downloadBatchResults());
@@ -284,7 +355,7 @@ btnBatchDownload.addEventListener('click', () => downloadBatchResults());
 // Close modal on background click
 batchModal.addEventListener('click', (e) => {
   if (e.target === batchModal) {
-    batchModal.classList.add('hidden');
+    closeModal(batchModal, btnBatch);
   }
 });
 
@@ -340,6 +411,9 @@ async function handleDrdDecisionClick(decisionId, traceEntry) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     viewer.highlightRules(decisionId, traceEntry.matchedRules);
   }
+
+  // Scroll the trace table to the corresponding entry and highlight it
+  scrollTraceToDecision(decisionId);
 }
 
 btnViewDrd.addEventListener('click', async () => {
@@ -407,8 +481,18 @@ document.addEventListener('keydown', (e) => {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-  // Escape — navigate back to DRD view from a decision table
+  // Escape — close modals first, then navigate back to DRD
   if (e.key === 'Escape') {
+    if (!batchModal.classList.contains('hidden')) {
+      e.preventDefault();
+      closeModal(batchModal, btnBatch);
+      return;
+    }
+    if (!compareModal.classList.contains('hidden')) {
+      e.preventDefault();
+      closeModal(compareModal, btnCompare);
+      return;
+    }
     if (!viewer.isDrdView() && lastTrace && lastTrace.length > 1) {
       e.preventDefault();
       viewer.highlightDecisions(lastTrace, {
@@ -476,12 +560,12 @@ compareInput.addEventListener('change', async (e) => {
 });
 
 btnCompareClose.addEventListener('click', () => {
-  compareModal.classList.add('hidden');
+  closeModal(compareModal, btnCompare);
 });
 
 compareModal.addEventListener('click', (e) => {
   if (e.target === compareModal) {
-    compareModal.classList.add('hidden');
+    closeModal(compareModal, btnCompare);
   }
 });
 
@@ -572,7 +656,7 @@ function showComparison(leftModel, rightModel) {
   }
 
   compareResults.innerHTML = html;
-  compareModal.classList.remove('hidden');
+  openModal(compareModal);
 }
 
 function formatRuleEntries(inputs, outputs) {
@@ -871,7 +955,7 @@ async function runBatchEvaluation(rows) {
 
   html += '</tbody></table>';
   batchResults.innerHTML = html;
-  batchModal.classList.remove('hidden');
+  openModal(batchModal);
 }
 
 function downloadBatchResults() {
@@ -1114,12 +1198,25 @@ function showTrace(trace) {
  * Handle click on a trace table row — navigate to the decision.
  */
 async function handleTraceRowClick(entry) {
-  // Highlight the clicked row
-  const rows = traceOutput.querySelectorAll('.trace-row');
-  rows.forEach((r) => r.classList.remove('trace-active'));
-  const activeRow = traceOutput.querySelector(`[data-decision-id="${entry.decisionId}"]`);
-  if (activeRow) activeRow.classList.add('trace-active');
+  // Highlight the clicked row and scroll it into view
+  scrollTraceToDecision(entry.decisionId);
 
   // Navigate to the decision
   await handleDrdDecisionClick(entry.decisionId, entry);
+}
+
+/**
+ * Scroll the trace table to highlight the row for the given decision.
+ *
+ * @param {string} decisionId - The decision element ID
+ */
+function scrollTraceToDecision(decisionId) {
+  const rows = traceOutput.querySelectorAll('.trace-row');
+  rows.forEach((r) => r.classList.remove('trace-active'));
+
+  const activeRow = traceOutput.querySelector(`[data-decision-id="${decisionId}"]`);
+  if (activeRow) {
+    activeRow.classList.add('trace-active');
+    activeRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
