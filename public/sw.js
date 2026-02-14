@@ -1,12 +1,12 @@
 /**
- * Service Worker for DMN Simulator PWA.
+ * Service Worker for DMN Playground PWA.
  *
  * Provides offline support by caching the application shell and assets.
  * Uses a cache-first strategy for static assets and network-first for
  * the HTML shell to ensure updates are picked up.
  */
 
-const CACHE_NAME = 'dmn-simulator-v1';
+const CACHE_NAME = 'dmn-playground-v1';
 
 /**
  * Assets to pre-cache during installation.

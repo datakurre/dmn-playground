@@ -83,4 +83,38 @@ describe('DRG Resolver', () => {
       expect(getDependencies(model, 'C')).toEqual(['A', 'B']);
     });
   });
+
+  describe('Error handling', () => {
+    it('throws for non-existent decision in resolveForDecision', () => {
+      const model = makeModel({ A: [] });
+      expect(() => resolveEvaluationOrder(model, 'nonexistent')).toThrow('Decision not found');
+    });
+
+    it('throws for non-existent decision in resolveAll when referenced as dependency', () => {
+      // B references C which doesn't exist
+      const decisions = new Map();
+      decisions.set('B', {
+        id: 'B',
+        name: 'B',
+        logic: { type: 'decisionTable' },
+        informationRequirements: ['C'],
+      });
+      const model = { decisions };
+      expect(() => resolveEvaluationOrder(model)).toThrow('Decision not found');
+    });
+
+    it('detects circular dependency in resolveAll', () => {
+      const model = makeModel({
+        X: ['Y'],
+        Y: ['Z'],
+        Z: ['X'],
+      });
+      expect(() => resolveEvaluationOrder(model)).toThrow(/[Cc]ircular/);
+    });
+
+    it('detects self-referential circular dependency', () => {
+      const model = makeModel({ A: ['A'] });
+      expect(() => resolveEvaluationOrder(model, 'A')).toThrow(/[Cc]ircular/);
+    });
+  });
 });

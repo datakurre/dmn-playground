@@ -140,5 +140,100 @@ describe('Hit Policies', () => {
       const hp = applyHitPolicy('COLLECT', 'COUNT', [], outputNames);
       expect(hp.result).toBe(0);
     });
+
+    it('COLLECT + MAX with no matches returns null', () => {
+      const hp = applyHitPolicy('COLLECT', 'MAX', [], outputNames);
+      expect(hp.result).toBe(null);
+    });
+
+    it('COLLECT + SUM with non-numeric values treats them as zero', () => {
+      const matched = [
+        rule('r1', 0, { result: 10 }),
+        rule('r2', 1, { result: 'abc' }),
+        rule('r3', 2, { result: 5 }),
+      ];
+      const hp = applyHitPolicy('COLLECT', 'SUM', matched, outputNames);
+      expect(hp.result).toEqual({ result: 15 });
+    });
+
+    it('COLLECT + MIN with non-numeric values ignores them', () => {
+      const matched = [
+        rule('r1', 0, { result: 'abc' }),
+        rule('r2', 1, { result: 10 }),
+        rule('r3', 2, { result: 5 }),
+      ];
+      const hp = applyHitPolicy('COLLECT', 'MIN', matched, outputNames);
+      expect(hp.result).toEqual({ result: 5 });
+    });
+
+    it('COLLECT + MAX with non-numeric values ignores them', () => {
+      const matched = [
+        rule('r1', 0, { result: 'abc' }),
+        rule('r2', 1, { result: 10 }),
+        rule('r3', 2, { result: 20 }),
+      ];
+      const hp = applyHitPolicy('COLLECT', 'MAX', matched, outputNames);
+      expect(hp.result).toEqual({ result: 20 });
+    });
+
+    it('COLLECT + MIN with only non-numeric values returns null per output', () => {
+      const matched = [rule('r1', 0, { result: 'abc' }), rule('r2', 1, { result: 'def' })];
+      const hp = applyHitPolicy('COLLECT', 'MIN', matched, outputNames);
+      expect(hp.result).toEqual({ result: null });
+    });
+
+    it('COLLECT + MAX with only non-numeric values returns null per output', () => {
+      const matched = [rule('r1', 0, { result: 'abc' }), rule('r2', 1, { result: 'def' })];
+      const hp = applyHitPolicy('COLLECT', 'MAX', matched, outputNames);
+      expect(hp.result).toEqual({ result: null });
+    });
+
+    it('unknown aggregation returns error', () => {
+      const matched = [rule('r1', 0, { result: 10 })];
+      const hp = applyHitPolicy('COLLECT', 'MEDIAN', matched, outputNames);
+      expect(hp.result).toBe(null);
+      expect(hp.error).toContain('Unknown COLLECT aggregation');
+    });
+  });
+
+  describe('Multi-output', () => {
+    const multiOutputNames = ['category', 'score'];
+
+    it('UNIQUE with multi-output returns full outputs object', () => {
+      const matched = [rule('r1', 0, { category: 'A', score: 10 })];
+      const hp = applyHitPolicy('UNIQUE', undefined, matched, multiOutputNames);
+      expect(hp.result).toEqual({ category: 'A', score: 10 });
+    });
+
+    it('RULE ORDER with multi-output returns list of output objects', () => {
+      const matched = [
+        rule('r1', 0, { category: 'A', score: 10 }),
+        rule('r2', 1, { category: 'B', score: 20 }),
+      ];
+      const hp = applyHitPolicy('RULE ORDER', undefined, matched, multiOutputNames);
+      expect(hp.result).toEqual([
+        { category: 'A', score: 10 },
+        { category: 'B', score: 20 },
+      ]);
+    });
+
+    it('COLLECT + SUM with multi-output sums each column', () => {
+      const matched = [
+        rule('r1', 0, { category: 'A', score: 10 }),
+        rule('r2', 1, { category: 'B', score: 20 }),
+      ];
+      const hp = applyHitPolicy('COLLECT', 'SUM', matched, multiOutputNames);
+      // Non-numeric columns get 0
+      expect(hp.result.score).toBe(30);
+    });
+  });
+
+  describe('Unknown hit policy', () => {
+    it('returns error for unknown hit policy', () => {
+      const matched = [rule('r1', 0, { result: 'A' })];
+      const hp = applyHitPolicy('UNKNOWN_POLICY', undefined, matched, outputNames);
+      expect(hp.result).toBe(null);
+      expect(hp.error).toContain('Unknown hit policy');
+    });
   });
 });

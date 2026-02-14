@@ -1,6 +1,34 @@
 import { describe, it, expect } from 'vitest';
 
 import { FeelinProvider } from '../../src/engine/feel/feelin.js';
+import { FeelProvider } from '../../src/engine/feel/provider.js';
+
+describe('FeelProvider (abstract)', () => {
+  it('cannot be instantiated directly', () => {
+    expect(() => new FeelProvider('test')).toThrow('abstract');
+  });
+
+  it('evaluate() throws when not overridden', () => {
+    // Create a minimal subclass that does NOT override evaluate
+    class StubProvider extends FeelProvider {
+      constructor() {
+        super('stub');
+      }
+    }
+    const stub = new StubProvider();
+    expect(() => stub.evaluate('1+1')).toThrow('evaluate()');
+  });
+
+  it('unaryTest() throws when not overridden', () => {
+    class StubProvider extends FeelProvider {
+      constructor() {
+        super('stub');
+      }
+    }
+    const stub = new StubProvider();
+    expect(() => stub.unaryTest('> 5', 10)).toThrow('unaryTest()');
+  });
+});
 
 describe('FeelinProvider', () => {
   const provider = new FeelinProvider();

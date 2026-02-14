@@ -206,4 +206,167 @@ describe('compareModels', () => {
       expect(modifiedIdx).toBeLessThan(unchangedIdx);
     }
   });
+
+  it('detects changed aggregation', async () => {
+    const xml = loadFixture('collect-sum-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    const dec = model2.decisions.values().next().value;
+    if (dec.logic?.type === 'decisionTable') {
+      dec.logic.aggregation = 'MAX';
+    }
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const aggChange = modifiedDec.changes.find((c) => c.field === 'aggregation');
+    expect(aggChange).toBeDefined();
+    expect(aggChange.right).toBe('MAX');
+  });
+
+  it('detects changed decision name', async () => {
+    const xml = loadFixture('simple-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    const dec = model2.decisions.values().next().value;
+    dec.name = 'Renamed Decision';
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const nameChange = modifiedDec.changes.find((c) => c.field === 'name');
+    expect(nameChange).toBeDefined();
+    expect(nameChange.right).toBe('Renamed Decision');
+  });
+
+  it('detects changed information requirements', async () => {
+    const xml = loadFixture('drg-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    // Find the decision with dependencies and modify them
+    for (const [, dec] of model2.decisions) {
+      if (dec.informationRequirements.length > 0) {
+        dec.informationRequirements = ['fake_decision'];
+        break;
+      }
+    }
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const reqChange = modifiedDec.changes.find((c) => c.field === 'informationRequirements');
+    expect(reqChange).toBeDefined();
+  });
+
+  it('detects changed literal expression typeRef', async () => {
+    const xml = loadFixture('literal-expression.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    const dec = model2.decisions.values().next().value;
+    if (dec.logic?.type === 'literalExpression') {
+      dec.logic.typeRef = 'string';
+    }
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const typeRefChange = modifiedDec.changes.find((c) => c.field === 'typeRef');
+    expect(typeRefChange).toBeDefined();
+  });
+
+  it('detects logic type change (decisionTable to literalExpression)', async () => {
+    const xml = loadFixture('simple-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    const dec = model2.decisions.values().next().value;
+    dec.logic = { type: 'literalExpression', expression: 'x + 1', id: 'le1' };
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const logicChange = modifiedDec.changes.find((c) => c.field === 'logicType');
+    expect(logicChange).toBeDefined();
+    expect(logicChange.left).toBe('decisionTable');
+    expect(logicChange.right).toBe('literalExpression');
+  });
+
+  it('detects input definition changes', async () => {
+    const xml = loadFixture('simple-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    const dec = model2.decisions.values().next().value;
+    if (dec.logic?.type === 'decisionTable' && dec.logic.inputs.length > 0) {
+      dec.logic.inputs[0].expression = 'newExpression';
+    }
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const inputChange = modifiedDec.changes.find((c) => c.field === 'inputs');
+    expect(inputChange).toBeDefined();
+  });
+
+  it('detects output definition changes', async () => {
+    const xml = loadFixture('simple-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = await parseDmnXml(xml);
+
+    const dec = model2.decisions.values().next().value;
+    if (dec.logic?.type === 'decisionTable' && dec.logic.outputs.length > 0) {
+      dec.logic.outputs[0].typeRef = 'integer';
+    }
+
+    const diff = compareModels(model1, model2);
+
+    const modifiedDec = diff.decisions.find((d) => d.status === 'modified');
+    expect(modifiedDec).toBeDefined();
+    const outputChange = modifiedDec.changes.find((c) => c.field === 'outputs');
+    expect(outputChange).toBeDefined();
+  });
+
+  it('includes rule diffs for added decision with decision table', async () => {
+    const xml = loadFixture('simple-decision.dmn');
+    const model1 = { decisions: new Map() }; // empty
+    const model2 = await parseDmnXml(xml);
+
+    const diff = compareModels(model1, model2);
+
+    const addedDec = diff.decisions.find((d) => d.status === 'added');
+    expect(addedDec).toBeDefined();
+    expect(addedDec.ruleDiffs).toBeDefined();
+    addedDec.ruleDiffs.forEach((rd) => {
+      expect(rd.status).toBe('added');
+      expect(rd.rightInputEntries).toBeDefined();
+      expect(rd.rightOutputEntries).toBeDefined();
+    });
+  });
+
+  it('includes rule diffs for removed decision with decision table', async () => {
+    const xml = loadFixture('simple-decision.dmn');
+    const model1 = await parseDmnXml(xml);
+    const model2 = { decisions: new Map() }; // empty
+
+    const diff = compareModels(model1, model2);
+
+    const removedDec = diff.decisions.find((d) => d.status === 'removed');
+    expect(removedDec).toBeDefined();
+    expect(removedDec.ruleDiffs).toBeDefined();
+    removedDec.ruleDiffs.forEach((rd) => {
+      expect(rd.status).toBe('removed');
+      expect(rd.leftInputEntries).toBeDefined();
+      expect(rd.leftOutputEntries).toBeDefined();
+    });
+  });
 });

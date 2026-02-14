@@ -85,6 +85,17 @@ describe('Batch Evaluation', () => {
 
     expect(results[0].result).toBe(5.0);
   });
+
+  it('captures errors for rows that throw during evaluation', async () => {
+    const model = await parseDmnXml(loadFixture('simple-decision.dmn'));
+    // Evaluate against a non-existent decision to trigger an error per row
+    const rows = [{ age: 10 }];
+    const results = evaluateBatch(model, 'nonexistent', rows);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].error).toBeDefined();
+    expect(results[0].result).toBe(null);
+  });
 });
 
 describe('CSV Parsing', () => {

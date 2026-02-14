@@ -1,4 +1,4 @@
-# DMN Simulator
+# DMN Playground
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -7,11 +7,11 @@
 > This project is primarily developed using AI coding agents (GitHub Copilot).
 > All code is reviewed before merging, but please report any issues you find.
 
-A standalone, browser-based **DMN (Decision Model and Notation) simulator** that
+A standalone, browser-based **DMN (Decision Model and Notation) playground** that
 evaluates DMN 1.3 decision tables, literal expressions, and decision requirements
 graphs — **no backend required**. Everything runs in the browser.
 
-The simulator is designed for **[Operaton](https://github.com/operaton/operaton) /
+The playground is designed for **[Operaton](https://github.com/operaton/operaton) /
 Camunda 7 compatibility**: it produces the same evaluation results as the Operaton
 BPM engine for the same DMN model and input data.
 
@@ -31,7 +31,7 @@ BPM engine for the same DMN model and input data.
 
 ## FEEL Backends
 
-The simulator supports two pluggable FEEL expression engines:
+The playground supports two pluggable FEEL expression engines:
 
 | Backend | Description | Fidelity |
 |---|---|---|
@@ -114,7 +114,7 @@ DMN XML (file / paste / URL)
 ## Project Structure
 
 ```
-dmn-simulator/
+dmn-playground/
 ├── src/
 │   ├── engine/           # Core DMN evaluation engine
 │   │   ├── evaluate.js   # Main evaluation entry point

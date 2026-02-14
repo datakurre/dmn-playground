@@ -1,7 +1,7 @@
 {
-  "name": "dmn-simulator",
+  "name": "dmn-playground",
   "version": "0.1.0",
-  "description": "Standalone browser-based DMN simulator compatible with Operaton/Camunda 7",
+  "description": "Standalone browser-based DMN playground compatible with Operaton/Camunda 7",
   "type": "module",
   "main": "src/index.js",
   "exports": {

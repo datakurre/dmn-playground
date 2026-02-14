@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 /**
- * dmn-simulator — main entry point.
+ * dmn-playground — main entry point.
  *
  * Re-exports the public API for the DMN engine.
- * This module can be consumed as a library: `@dmn-simulator/engine`
+ * This module can be consumed as a library: `@dmn-playground/engine`
  */
 
 export { parseDmnXml } from './parser/parse.js';

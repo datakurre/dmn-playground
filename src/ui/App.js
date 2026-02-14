@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /**
- * App.js — Main application entry point for the DMN Simulator UI.
+ * App.js — Main application entry point for the DMN Playground UI.
  *
  * Wires up the viewer, input form, and evaluation engine.
  */
