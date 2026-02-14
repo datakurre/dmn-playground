@@ -398,6 +398,63 @@ export function createViewer(container) {
     },
 
     /**
+     * Zoom the DRD canvas to fit only the evaluated decisions.
+     *
+     * Calculates the bounding box of all evaluated decision elements
+     * and adjusts the viewbox to show only those elements with padding.
+     *
+     * @param {import('../engine/evaluate.js').EvaluationTrace[]} trace - Evaluation trace entries
+     */
+    zoomToEvaluated(trace) {
+      try {
+        if (!trace || trace.length === 0) return;
+
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return;
+
+        const canvas = drdViewer.get('canvas');
+        const elementRegistry = drdViewer.get('elementRegistry');
+
+        const evaluatedIds = new Set(trace.map((e) => e.decisionId));
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let found = false;
+
+        evaluatedIds.forEach((id) => {
+          const element = elementRegistry.get(id);
+          if (element && element.x !== undefined && element.y !== undefined) {
+            found = true;
+            minX = Math.min(minX, element.x);
+            minY = Math.min(minY, element.y);
+            maxX = Math.max(maxX, element.x + (element.width || 180));
+            maxY = Math.max(maxY, element.y + (element.height || 80));
+          }
+        });
+
+        if (!found) return;
+
+        // Add padding around the bounding box
+        const padding = 60;
+        minX -= padding;
+        minY -= padding;
+        maxX += padding;
+        maxY += padding;
+
+        canvas.viewbox({
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+        });
+      } catch {
+        // Not in DRD mode or elements not found
+      }
+    },
+
+    /**
      * Whether the viewer is currently in edit mode.
      *
      * @returns {boolean}

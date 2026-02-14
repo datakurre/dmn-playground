@@ -750,3 +750,107 @@ describe('Zoom controls', () => {
     expect(() => ctrl.zoomFit()).not.toThrow();
   });
 });
+
+// ── Zoom to Evaluated ───────────────────────────────────────────────
+
+describe('zoomToEvaluated', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    mockCanvas.zoom = vi.fn().mockReturnValue(1.0);
+    mockCanvas.viewbox = vi.fn();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('does nothing for null trace', () => {
+    ctrl.zoomToEvaluated(null);
+    expect(mockCanvas.viewbox).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for empty trace', () => {
+    ctrl.zoomToEvaluated([]);
+    expect(mockCanvas.viewbox).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when no active viewer', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.zoomToEvaluated(makeTrace([{ decisionId: 'dec1' }]))).not.toThrow();
+  });
+
+  it('sets viewbox to bounding box of evaluated decisions', () => {
+    mockElementRegistry.get = vi.fn((id) => {
+      if (id === 'a') return { x: 100, y: 50, width: 180, height: 80 };
+      if (id === 'b') return { x: 400, y: 200, width: 180, height: 80 };
+      return undefined;
+    });
+
+    ctrl.zoomToEvaluated(
+      makeTrace([
+        { decisionId: 'a', decisionName: 'A' },
+        { decisionId: 'b', decisionName: 'B' },
+      ]),
+    );
+
+    expect(mockCanvas.viewbox).toHaveBeenCalledTimes(1);
+    const vb = mockCanvas.viewbox.mock.calls[0][0];
+    // min x = 100 - 60 padding = 40
+    expect(vb.x).toBe(40);
+    // min y = 50 - 60 padding = -10
+    expect(vb.y).toBe(-10);
+    // width = (400 + 180 + 60) - 40 = 600
+    expect(vb.width).toBe(600);
+    // height = (200 + 80 + 60) - (-10) = 350
+    expect(vb.height).toBe(350);
+  });
+
+  it('uses default dimensions when element has no width/height', () => {
+    mockElementRegistry.get = vi.fn((id) => {
+      if (id === 'a') return { x: 0, y: 0 };
+      return undefined;
+    });
+
+    ctrl.zoomToEvaluated(makeTrace([{ decisionId: 'a' }]));
+
+    expect(mockCanvas.viewbox).toHaveBeenCalledTimes(1);
+    const vb = mockCanvas.viewbox.mock.calls[0][0];
+    // x: 0 - 60 = -60, maxX: 0 + 180 + 60 = 240
+    expect(vb.x).toBe(-60);
+    expect(vb.y).toBe(-60);
+    expect(vb.width).toBe(300); // 240 - (-60)
+    expect(vb.height).toBe(200); // 80 + 120
+  });
+
+  it('does nothing when no evaluated elements found in registry', () => {
+    mockElementRegistry.get = vi.fn().mockReturnValue(undefined);
+
+    ctrl.zoomToEvaluated(makeTrace([{ decisionId: 'missing' }]));
+
+    expect(mockCanvas.viewbox).not.toHaveBeenCalled();
+  });
+
+  it('handles canvas.viewbox throwing gracefully', () => {
+    mockElementRegistry.get = vi.fn().mockReturnValue({ x: 0, y: 0, width: 100, height: 50 });
+    mockCanvas.viewbox = vi.fn(() => {
+      throw new Error('viewbox error');
+    });
+
+    expect(() => ctrl.zoomToEvaluated(makeTrace([{ decisionId: 'a' }]))).not.toThrow();
+  });
+
+  it('handles single evaluated decision', () => {
+    mockElementRegistry.get = vi.fn((id) => {
+      if (id === 'dec1') return { x: 200, y: 100, width: 180, height: 80 };
+      return undefined;
+    });
+
+    ctrl.zoomToEvaluated(makeTrace([{ decisionId: 'dec1' }]));
+
+    expect(mockCanvas.viewbox).toHaveBeenCalledTimes(1);
+    const vb = mockCanvas.viewbox.mock.calls[0][0];
+    expect(vb.x).toBe(140); // 200 - 60
+    expect(vb.y).toBe(40); // 100 - 60
+    expect(vb.width).toBe(300); // (200 + 180 + 60) - 140
+    expect(vb.height).toBe(200); // (100 + 80 + 60) - 40
+  });
+});

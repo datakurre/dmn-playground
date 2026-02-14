@@ -94,6 +94,7 @@ const traceActions = document.getElementById('trace-actions');
 const btnZoomIn = document.getElementById('btn-zoom-in');
 const btnZoomOut = document.getElementById('btn-zoom-out');
 const btnZoomReset = document.getElementById('btn-zoom-reset');
+const btnZoomEvaluated = document.getElementById('btn-zoom-evaluated');
 const drdZoomControls = document.getElementById('drd-zoom-controls');
 
 // ── Initialize Viewer ───────────────────────────────────────────────
@@ -371,6 +372,7 @@ btnResetDrd.addEventListener('click', () => {
   drdOverlaysVisible = true;
   drdControls.classList.add('hidden');
   btnToggleOverlays.textContent = '👁 Hide Overlays';
+  btnZoomEvaluated.classList.add('hidden');
 });
 
 // ── Trace Export ────────────────────────────────────────────────
@@ -392,6 +394,37 @@ btnTraceCsv.addEventListener('click', () => {
 btnZoomIn.addEventListener('click', () => viewer.zoomIn());
 btnZoomOut.addEventListener('click', () => viewer.zoomOut());
 btnZoomReset.addEventListener('click', () => viewer.zoomFit());
+btnZoomEvaluated.addEventListener('click', () => {
+  if (lastTrace && lastTrace.length > 0) {
+    viewer.zoomToEvaluated(lastTrace);
+  }
+});
+
+// ── Keyboard Shortcuts ──────────────────────────────────────────
+
+document.addEventListener('keydown', (e) => {
+  // Don't intercept when user is typing in an input/textarea/select
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  // Escape — navigate back to DRD view from a decision table
+  if (e.key === 'Escape') {
+    if (!viewer.isDrdView() && lastTrace && lastTrace.length > 1) {
+      e.preventDefault();
+      viewer.highlightDecisions(lastTrace, {
+        onDecisionClick: handleDrdDecisionClick,
+      });
+    }
+    return;
+  }
+
+  // Ctrl/Cmd+Enter — run evaluation
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runEvaluation();
+    return;
+  }
+});
 
 btnBatchRun.addEventListener('click', () => {
   const text = batchEditor.value.trim();
@@ -715,6 +748,8 @@ async function runEvaluation() {
         drdControls.classList.remove('hidden');
         drdOverlaysVisible = true;
         btnToggleOverlays.textContent = '👁 Hide Overlays';
+        // Show zoom-to-evaluated button
+        btnZoomEvaluated.classList.remove('hidden');
       } else if (
         lastTraceEntry.type === 'decisionTable' &&
         lastTraceEntry.matchedRules.length > 0
@@ -976,47 +1011,115 @@ function formatError(err) {
 
 function showTrace(trace) {
   if (!trace || trace.length === 0) {
-    traceOutput.textContent = 'No trace available';
+    traceOutput.innerHTML = '<span class="trace-empty">No trace available</span>';
     traceActions.classList.add('hidden');
     return;
   }
 
   traceActions.classList.remove('hidden');
 
-  const lines = [];
+  // Build interactive trace table
+  const table = document.createElement('table');
+  table.className = 'trace-table';
+  table.setAttribute('role', 'grid');
+  table.setAttribute('aria-label', 'Evaluation trace');
+
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr><th>#</th><th>Decision</th><th>Type</th><th>Result</th><th>Time</th></tr>';
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
   let totalDuration = 0;
-  for (const entry of trace) {
-    lines.push(`━━ ${entry.decisionName} (${entry.decisionId}) ━━`);
-    lines.push(`  Type: ${entry.type}`);
+
+  for (let i = 0; i < trace.length; i++) {
+    const entry = trace[i];
+    const tr = document.createElement('tr');
+    tr.className = 'trace-row';
+    tr.setAttribute('role', 'row');
+    tr.setAttribute('tabindex', '0');
+    tr.setAttribute('aria-label', `Step ${i + 1}: ${entry.decisionName}`);
+    tr.dataset.decisionId = entry.decisionId;
+
+    if (entry.error) tr.classList.add('trace-error');
+    if (entry.type === 'override') tr.classList.add('trace-override');
+
+    const typeIcon =
+      entry.type === 'override'
+        ? '⚡'
+        : entry.error
+          ? '❌'
+          : entry.type === 'literalExpression'
+            ? '𝑓'
+            : '▦';
+
+    const resultText = entry.error ? entry.error : (JSON.stringify(entry.result) ?? '∅');
+    const duration = entry.durationMs !== undefined ? `${entry.durationMs}ms` : '—';
+
+    if (entry.durationMs !== undefined) totalDuration += entry.durationMs;
+
+    tr.innerHTML = [
+      `<td class="trace-step">${i + 1}</td>`,
+      `<td class="trace-decision">${escapeHtml(entry.decisionName || entry.decisionId)}</td>`,
+      `<td class="trace-type">${typeIcon}</td>`,
+      `<td class="trace-result">${escapeHtml(resultText.length > 60 ? resultText.slice(0, 57) + '...' : resultText)}</td>`,
+      `<td class="trace-duration">${duration}</td>`,
+    ].join('');
+
+    // Tooltip with full detail
+    const tooltipLines = [
+      `Decision: ${entry.decisionName} (${entry.decisionId})`,
+      `Type: ${entry.type}`,
+    ];
     if (entry.hitPolicy) {
-      lines.push(
-        `  Hit Policy: ${entry.hitPolicy}${entry.aggregation ? ' + ' + entry.aggregation : ''}`,
+      tooltipLines.push(
+        `Hit Policy: ${entry.hitPolicy}${entry.aggregation ? ' + ' + entry.aggregation : ''}`,
       );
     }
-    if (entry.type !== 'override') {
-      lines.push(`  Inputs: ${JSON.stringify(entry.inputValues)}`);
-      lines.push(`  Matched Rules: ${entry.matchedRules.length}`);
-      for (const rule of entry.matchedRules) {
-        lines.push(`    ✓ Rule ${rule.index + 1} (${rule.id}): ${JSON.stringify(rule.outputs)}`);
+    if (entry.type !== 'override' && entry.inputValues) {
+      tooltipLines.push(`Inputs: ${JSON.stringify(entry.inputValues)}`);
+    }
+    tooltipLines.push(`Result: ${JSON.stringify(entry.result, null, 2)}`);
+    if (entry.matchedRules && entry.matchedRules.length > 0) {
+      tooltipLines.push(`Matched Rules: ${entry.matchedRules.length}`);
+    }
+    if (entry.error) tooltipLines.push(`Error: ${entry.error}`);
+    tr.title = tooltipLines.join('\n');
+
+    // Click handler — navigate to decision in DRD or decision table
+    tr.addEventListener('click', () => handleTraceRowClick(entry));
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleTraceRowClick(entry);
       }
-    }
-    lines.push(`  Result: ${JSON.stringify(entry.result)}`);
-    if (entry.durationMs !== undefined) {
-      lines.push(`  Duration: ${entry.durationMs}ms`);
-      totalDuration += entry.durationMs;
-    }
-    if (entry.error) {
-      lines.push(`  ⚠ Error: ${entry.error}`);
-    }
-    if (entry.type === 'override') {
-      lines.push('  ⚡ Value overridden (what-if)');
-    }
-    lines.push('');
+    });
+
+    tbody.appendChild(tr);
   }
 
+  table.appendChild(tbody);
+
+  // Summary footer
   if (trace.length > 1 && totalDuration > 0) {
-    lines.push(`━━ Total evaluation time: ${Math.round(totalDuration * 100) / 100}ms ━━`);
+    const tfoot = document.createElement('tfoot');
+    tfoot.innerHTML = `<tr><td colspan="4">Total</td><td>${Math.round(totalDuration * 100) / 100}ms</td></tr>`;
+    table.appendChild(tfoot);
   }
 
-  traceOutput.textContent = lines.join('\n');
+  traceOutput.innerHTML = '';
+  traceOutput.appendChild(table);
+}
+
+/**
+ * Handle click on a trace table row — navigate to the decision.
+ */
+async function handleTraceRowClick(entry) {
+  // Highlight the clicked row
+  const rows = traceOutput.querySelectorAll('.trace-row');
+  rows.forEach((r) => r.classList.remove('trace-active'));
+  const activeRow = traceOutput.querySelector(`[data-decision-id="${entry.decisionId}"]`);
+  if (activeRow) activeRow.classList.add('trace-active');
+
+  // Navigate to the decision
+  await handleDrdDecisionClick(entry.decisionId, entry);
 }
