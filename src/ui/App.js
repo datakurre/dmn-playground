@@ -169,6 +169,7 @@ const btnZoomIn = document.getElementById('btn-zoom-in');
 const btnZoomOut = document.getElementById('btn-zoom-out');
 const btnZoomReset = document.getElementById('btn-zoom-reset');
 const btnZoomEvaluated = document.getElementById('btn-zoom-evaluated');
+const btnToggleMinimap = document.getElementById('btn-toggle-minimap');
 const drdZoomControls = document.getElementById('drd-zoom-controls');
 
 // Animation controls
@@ -455,6 +456,7 @@ btnResetDrd.addEventListener('click', () => {
   stopAnimation();
   viewer.clearDecisionHighlights();
   viewer.clearHighlights();
+  viewer.clearComparisonHighlights();
   lastTrace = null;
   drdOverlaysVisible = true;
   drdControls.classList.add('hidden');
@@ -636,6 +638,16 @@ btnZoomEvaluated.addEventListener('click', () => {
     viewer.zoomToEvaluated(lastTrace);
   }
 });
+btnToggleMinimap.addEventListener('click', () => {
+  viewer.toggleMinimap();
+  if (viewer.isMinimapOpen()) {
+    btnToggleMinimap.textContent = '🗺 Hide Map';
+    btnToggleMinimap.title = 'Hide minimap';
+  } else {
+    btnToggleMinimap.textContent = '🗺 Minimap';
+    btnToggleMinimap.title = 'Show minimap for navigation';
+  }
+});
 
 // ── Keyboard Shortcuts ──────────────────────────────────────────
 
@@ -734,6 +746,9 @@ compareModal.addEventListener('click', (e) => {
 
 function showComparison(leftModel, rightModel) {
   const diff = compareModels(leftModel, rightModel);
+
+  // Highlight differences on the DRD view
+  viewer.highlightComparison(diff);
 
   // Summary
   const parts = [];

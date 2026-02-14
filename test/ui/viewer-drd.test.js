@@ -53,6 +53,15 @@ vi.mock('dmn-js/lib/Modeler.js', () => ({
   }),
 }));
 
+vi.mock('diagram-js-minimap', () => ({
+  default: {
+    __init__: ['minimap'],
+    minimap: ['type', class MockMinimap {}],
+  },
+}));
+
+vi.mock('diagram-js-minimap/assets/diagram-js-minimap.css', () => ({}));
+
 import { createViewer } from '../../src/ui/Viewer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -1537,5 +1546,314 @@ describe('clearDecisionHighlights data-flow cleanup', () => {
   it('removes data-flow overlays along with other overlay types', () => {
     ctrl.clearDecisionHighlights();
     expect(mockOverlays.remove).toHaveBeenCalledWith({ type: 'data-flow' });
+  });
+});
+
+// ── Minimap ─────────────────────────────────────────────────────────
+
+describe('toggleMinimap', () => {
+  let ctrl;
+  let mockMinimap;
+
+  beforeEach(() => {
+    resetMocks();
+    mockMinimap = {
+      toggle: vi.fn(),
+      open: vi.fn(),
+      close: vi.fn(),
+      isOpen: vi.fn().mockReturnValue(false),
+    };
+    mockActiveViewer.get.mockImplementation((service) => {
+      switch (service) {
+        case 'overlays':
+          return mockOverlays;
+        case 'canvas':
+          return mockCanvas;
+        case 'elementRegistry':
+          return mockElementRegistry;
+        case 'minimap':
+          return mockMinimap;
+        default:
+          return null;
+      }
+    });
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('toggles minimap when called with no argument', () => {
+    ctrl.toggleMinimap();
+    expect(mockMinimap.toggle).toHaveBeenCalled();
+  });
+
+  it('opens minimap when called with true', () => {
+    ctrl.toggleMinimap(true);
+    expect(mockMinimap.open).toHaveBeenCalled();
+  });
+
+  it('closes minimap when called with false', () => {
+    ctrl.toggleMinimap(false);
+    expect(mockMinimap.close).toHaveBeenCalled();
+  });
+
+  it('handles null activeViewer gracefully', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.toggleMinimap()).not.toThrow();
+  });
+
+  it('handles minimap not available gracefully', () => {
+    mockActiveViewer.get.mockImplementation((service) => {
+      if (service === 'minimap') throw new Error('No minimap');
+      return mockOverlays;
+    });
+    expect(() => ctrl.toggleMinimap()).not.toThrow();
+  });
+});
+
+describe('isMinimapOpen', () => {
+  let ctrl;
+  let mockMinimap;
+
+  beforeEach(() => {
+    resetMocks();
+    mockMinimap = {
+      toggle: vi.fn(),
+      open: vi.fn(),
+      close: vi.fn(),
+      isOpen: vi.fn().mockReturnValue(true),
+    };
+    mockActiveViewer.get.mockImplementation((service) => {
+      switch (service) {
+        case 'minimap':
+          return mockMinimap;
+        default:
+          return null;
+      }
+    });
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('returns true when minimap is open', () => {
+    expect(ctrl.isMinimapOpen()).toBe(true);
+  });
+
+  it('returns false when minimap is closed', () => {
+    mockMinimap.isOpen.mockReturnValue(false);
+    expect(ctrl.isMinimapOpen()).toBe(false);
+  });
+
+  it('returns false when activeViewer is null', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(ctrl.isMinimapOpen()).toBe(false);
+  });
+
+  it('returns false when minimap service is unavailable', () => {
+    mockActiveViewer.get.mockImplementation(() => {
+      throw new Error('No minimap');
+    });
+    expect(ctrl.isMinimapOpen()).toBe(false);
+  });
+});
+
+// ── highlightComparison ─────────────────────────────────────────────
+
+describe('highlightComparison', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('returns immediately for null diff', async () => {
+    await ctrl.highlightComparison(null);
+    expect(mockInstance.getViews).not.toHaveBeenCalled();
+  });
+
+  it('returns immediately for empty decisions', async () => {
+    await ctrl.highlightComparison({ decisions: [], summary: {} });
+    expect(mockInstance.getViews).not.toHaveBeenCalled();
+  });
+
+  it('returns when no DRD view is available', async () => {
+    mockInstance.getViews.mockReturnValue([{ type: 'decisionTable' }]);
+    const diff = {
+      decisions: [{ id: 'dec1', name: 'D1', status: 'modified', changes: [] }],
+      summary: { modified: 1, added: 0, removed: 0, unchanged: 0 },
+    };
+    await ctrl.highlightComparison(diff);
+    expect(mockInstance.open).not.toHaveBeenCalled();
+  });
+
+  it('adds marker and badge overlay for each decision in the diff', async () => {
+    withDrdView();
+    mockElementRegistry.get = vi.fn().mockReturnValue({ id: 'dec1' });
+
+    const diff = {
+      decisions: [{ id: 'dec1', name: 'Decision 1', status: 'modified', changes: [] }],
+      summary: { modified: 1, added: 0, removed: 0, unchanged: 0 },
+    };
+
+    await ctrl.highlightComparison(diff);
+
+    // Adds the CSS marker
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'compare-modified');
+
+    // Adds the badge overlay
+    expect(mockOverlays.add).toHaveBeenCalledWith(
+      'dec1',
+      'comparison-badge',
+      expect.objectContaining({
+        position: { top: -14, right: -14 },
+      }),
+    );
+  });
+
+  it('adds detail overlay for modified decisions with changes', async () => {
+    withDrdView();
+    mockElementRegistry.get = vi.fn().mockReturnValue({ id: 'dec1' });
+
+    const diff = {
+      decisions: [
+        {
+          id: 'dec1',
+          name: 'Decision 1',
+          status: 'modified',
+          changes: [{ field: 'hitPolicy', left: 'UNIQUE', right: 'FIRST' }],
+          ruleDiffs: [{ status: 'modified' }],
+        },
+      ],
+      summary: { modified: 1, added: 0, removed: 0, unchanged: 0 },
+    };
+
+    await ctrl.highlightComparison(diff);
+
+    // Should have badge overlay and detail overlay
+    const addCalls = mockOverlays.add.mock.calls;
+    expect(addCalls.some((c) => c[1] === 'comparison-badge')).toBe(true);
+    expect(addCalls.some((c) => c[1] === 'comparison-detail')).toBe(true);
+  });
+
+  it('handles added and removed decisions', async () => {
+    withDrdView();
+    mockElementRegistry.get = vi.fn().mockImplementation((id) => {
+      if (id === 'dec1') return { id: 'dec1' };
+      if (id === 'dec2') return { id: 'dec2' };
+      return null;
+    });
+
+    const diff = {
+      decisions: [
+        { id: 'dec1', name: 'Added', status: 'added', changes: [] },
+        { id: 'dec2', name: 'Removed', status: 'removed', changes: [] },
+      ],
+      summary: { added: 1, removed: 1, modified: 0, unchanged: 0 },
+    };
+
+    await ctrl.highlightComparison(diff);
+
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'compare-added');
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec2', 'compare-removed');
+  });
+
+  it('skips decisions not found in the element registry', async () => {
+    withDrdView();
+    mockElementRegistry.get = vi.fn().mockReturnValue(null);
+
+    const diff = {
+      decisions: [{ id: 'missing', name: 'Missing', status: 'added', changes: [] }],
+      summary: { added: 1, removed: 0, modified: 0, unchanged: 0 },
+    };
+
+    await ctrl.highlightComparison(diff);
+
+    expect(mockCanvas.addMarker).not.toHaveBeenCalled();
+    expect(mockOverlays.add).not.toHaveBeenCalled();
+  });
+
+  it('calls onDecisionClick when detail overlay is clicked', async () => {
+    withDrdView();
+    mockElementRegistry.get = vi.fn().mockReturnValue({ id: 'dec1' });
+
+    const onClick = vi.fn();
+    const diff = {
+      decisions: [
+        {
+          id: 'dec1',
+          name: 'D1',
+          status: 'modified',
+          changes: [{ field: 'hitPolicy', left: 'UNIQUE', right: 'FIRST' }],
+        },
+      ],
+      summary: { modified: 1, added: 0, removed: 0, unchanged: 0 },
+    };
+
+    await ctrl.highlightComparison(diff, { onDecisionClick: onClick });
+
+    // Find the detail overlay call
+    const detailCall = mockOverlays.add.mock.calls.find((c) => c[1] === 'comparison-detail');
+    expect(detailCall).toBeDefined();
+
+    // Simulate click on the detail HTML
+    const detailHtml = detailCall[2].html;
+    detailHtml.click();
+    expect(onClick).toHaveBeenCalledWith('dec1', diff.decisions[0]);
+  });
+
+  it('handles canvas.addMarker throwing', async () => {
+    withDrdView();
+    mockElementRegistry.get = vi.fn().mockReturnValue({ id: 'dec1' });
+    mockCanvas.addMarker.mockImplementation(() => {
+      throw new Error('marker error');
+    });
+
+    const diff = {
+      decisions: [{ id: 'dec1', name: 'D1', status: 'modified', changes: [] }],
+      summary: { modified: 1, added: 0, removed: 0, unchanged: 0 },
+    };
+
+    await expect(ctrl.highlightComparison(diff)).resolves.toBeUndefined();
+  });
+});
+
+// ── clearComparisonHighlights ───────────────────────────────────────
+
+describe('clearComparisonHighlights', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('removes comparison-badge and comparison-detail overlay types', () => {
+    ctrl.clearComparisonHighlights();
+    expect(mockOverlays.remove).toHaveBeenCalledWith({ type: 'comparison-badge' });
+    expect(mockOverlays.remove).toHaveBeenCalledWith({ type: 'comparison-detail' });
+  });
+
+  it('removes comparison markers from all elements', () => {
+    const elements = [{ id: 'dec1' }, { id: 'dec2' }];
+    mockElementRegistry.forEach.mockImplementation((fn) => elements.forEach(fn));
+
+    ctrl.clearComparisonHighlights();
+
+    for (const el of elements) {
+      expect(mockCanvas.removeMarker).toHaveBeenCalledWith(el.id, 'compare-added');
+      expect(mockCanvas.removeMarker).toHaveBeenCalledWith(el.id, 'compare-removed');
+      expect(mockCanvas.removeMarker).toHaveBeenCalledWith(el.id, 'compare-modified');
+      expect(mockCanvas.removeMarker).toHaveBeenCalledWith(el.id, 'compare-unchanged');
+    }
+  });
+
+  it('handles null activeViewer gracefully', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.clearComparisonHighlights()).not.toThrow();
+  });
+
+  it('handles overlays.remove throwing', () => {
+    mockOverlays.remove.mockImplementation(() => {
+      throw new Error('fail');
+    });
+    expect(() => ctrl.clearComparisonHighlights()).not.toThrow();
   });
 });

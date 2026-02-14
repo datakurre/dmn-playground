@@ -1186,6 +1186,89 @@ textarea:focus-visible {
   background: rgba(37, 99, 235, 0.1);
 }
 
+/* ── DRD Comparison Overlays ──────────────────────────────────────── */
+
+.compare-added .djs-outline {
+  stroke: var(--success) !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 8 4 !important;
+}
+
+.compare-removed .djs-outline {
+  stroke: var(--error) !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 8 4 !important;
+}
+
+.compare-modified .djs-outline {
+  stroke: var(--accent) !important;
+  stroke-width: 2px !important;
+}
+
+.compare-unchanged .djs-outline {
+  opacity: 0.4 !important;
+}
+
+.compare-unchanged .djs-visual rect,
+.compare-unchanged .djs-visual text {
+  opacity: 0.4;
+}
+
+.compare-drd-badge {
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.compare-drd-added {
+  background: var(--success);
+  color: white;
+}
+
+.compare-drd-removed {
+  background: var(--error);
+  color: white;
+}
+
+.compare-drd-modified {
+  background: var(--accent);
+  color: white;
+}
+
+.compare-drd-unchanged {
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.compare-drd-detail {
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  color: var(--text);
+}
+
+.compare-drd-detail:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  max-width: none;
+  overflow: visible;
+}
+
 /* ── Responsive Layout ───────────────────────────────────────────── */
 
 @media (max-width: 900px) {

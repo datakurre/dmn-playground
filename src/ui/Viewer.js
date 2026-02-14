@@ -21,6 +21,7 @@
 
 import DmnViewer from 'dmn-js/lib/Viewer.js';
 import DmnModeler from 'dmn-js/lib/Modeler.js';
+import minimapModule from 'diagram-js-minimap';
 import { formatOverlayResult } from './format.js';
 
 // Import dmn-js CSS
@@ -31,6 +32,7 @@ import 'dmn-js/dist/assets/dmn-js-decision-table.css';
 import 'dmn-js/dist/assets/dmn-js-decision-table-controls.css';
 import 'dmn-js/dist/assets/dmn-font/css/dmn.css';
 import 'dmn-js/dist/assets/dmn-js-literal-expression.css';
+import 'diagram-js-minimap/assets/diagram-js-minimap.css';
 
 /**
  * Initialize a dmn-js viewer/modeler in the given container.
@@ -40,8 +42,16 @@ import 'dmn-js/dist/assets/dmn-js-literal-expression.css';
  * @param {HTMLElement} container - DOM element to render into
  * @returns {Object} Controller with load/highlightRules/clearHighlights/setEditMode/saveXml methods
  */
+/** DRD-specific options: enable minimap module. */
+const DRD_OPTIONS = {
+  drd: {
+    additionalModules: [minimapModule],
+    minimap: { open: false },
+  },
+};
+
 export function createViewer(container) {
-  let viewer = new DmnViewer({ container });
+  let viewer = new DmnViewer({ container, ...DRD_OPTIONS });
   let editMode = false;
   let currentXml = null;
 
@@ -51,9 +61,9 @@ export function createViewer(container) {
   function recreateInstance(useModeler) {
     viewer.destroy();
     if (useModeler) {
-      viewer = new DmnModeler({ container });
+      viewer = new DmnModeler({ container, ...DRD_OPTIONS });
     } else {
-      viewer = new DmnViewer({ container });
+      viewer = new DmnViewer({ container, ...DRD_OPTIONS });
     }
   }
 
@@ -857,6 +867,178 @@ export function createViewer(container) {
         if (!drdViewer) return;
         const overlays = drdViewer.get('overlays');
         overlays.remove({ type: 'data-flow' });
+      } catch {
+        // Viewer may not be in DRD mode
+      }
+    },
+
+    /**
+     * Toggle the DRD minimap visibility.
+     *
+     * @param {boolean} [open] - If provided, set minimap open/closed.
+     *   If omitted, toggle the current state.
+     */
+    toggleMinimap(open) {
+      try {
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return;
+        const minimap = drdViewer.get('minimap');
+        if (open === undefined) {
+          minimap.toggle();
+        } else if (open) {
+          minimap.open();
+        } else {
+          minimap.close();
+        }
+      } catch {
+        // Minimap may not be available
+      }
+    },
+
+    /**
+     * Check if the minimap is currently open.
+     *
+     * @returns {boolean}
+     */
+    isMinimapOpen() {
+      try {
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return false;
+        const minimap = drdViewer.get('minimap');
+        return minimap.isOpen();
+      } catch {
+        return false;
+      }
+    },
+
+    /**
+     * Highlight DRD decisions based on a model comparison diff.
+     *
+     * Shows visual markers and overlays on decision nodes indicating
+     * whether they were added, removed, modified, or unchanged between
+     * two model versions.
+     *
+     * @param {import('../engine/compare.js').ModelComparison} diff - Comparison result
+     * @param {Object} [options]
+     * @param {Function} [options.onDecisionClick] - Callback when a diff overlay is clicked
+     * @returns {Promise<void>}
+     */
+    async highlightComparison(diff, options = {}) {
+      if (!diff || !diff.decisions || diff.decisions.length === 0) return;
+
+      // Find the DRD view
+      const views = viewer.getViews();
+      const drdView = views.find((v) => v.type === 'drd');
+      if (!drdView) return;
+
+      // Open the DRD view
+      await viewer.open(drdView);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const drdViewer = viewer.getActiveViewer();
+      if (!drdViewer) return;
+
+      const overlays = drdViewer.get('overlays');
+      const canvas = drdViewer.get('canvas');
+      const elementRegistry = drdViewer.get('elementRegistry');
+
+      // Clear any previous comparison highlights
+      this.clearComparisonHighlights();
+
+      for (const dec of diff.decisions) {
+        // Only annotate decisions that exist in this DRD
+        const element = elementRegistry.get(dec.id);
+        if (!element) continue;
+
+        try {
+          // Add a CSS marker based on the diff status
+          canvas.addMarker(dec.id, `compare-${dec.status}`);
+
+          // Build status overlay
+          const statusIcon =
+            dec.status === 'added'
+              ? '➕'
+              : dec.status === 'removed'
+                ? '➖'
+                : dec.status === 'modified'
+                  ? '✏️'
+                  : '✔️';
+
+          const badgeHtml = document.createElement('div');
+          badgeHtml.className = `compare-drd-badge compare-drd-${dec.status}`;
+          badgeHtml.textContent = statusIcon;
+          badgeHtml.title = `${dec.name || dec.id}: ${dec.status}`;
+          badgeHtml.setAttribute('role', 'img');
+          badgeHtml.setAttribute('aria-label', `${dec.name || dec.id}: ${dec.status}`);
+
+          overlays.add(dec.id, 'comparison-badge', {
+            position: { top: -14, right: -14 },
+            html: badgeHtml,
+          });
+
+          // For modified decisions, show a summary of changes
+          if (dec.status === 'modified' && dec.changes.length > 0) {
+            const detailHtml = document.createElement('div');
+            detailHtml.className = 'compare-drd-detail';
+
+            const changeTexts = dec.changes.map((c) => c.field).join(', ');
+            const ruleChanges = dec.ruleDiffs
+              ? dec.ruleDiffs.filter((r) => r.status !== 'unchanged').length
+              : 0;
+            let text = changeTexts;
+            if (ruleChanges > 0) {
+              text +=
+                (text ? ', ' : '') + `${ruleChanges} rule change${ruleChanges > 1 ? 's' : ''}`;
+            }
+            detailHtml.textContent = text;
+            detailHtml.title = `Changes: ${text}`;
+            detailHtml.setAttribute('role', 'note');
+            detailHtml.setAttribute('aria-label', `Changes to ${dec.name || dec.id}: ${text}`);
+
+            if (options.onDecisionClick) {
+              detailHtml.style.cursor = 'pointer';
+              detailHtml.addEventListener('click', (e) => {
+                e.stopPropagation();
+                options.onDecisionClick(dec.id, dec);
+              });
+            }
+
+            overlays.add(dec.id, 'comparison-detail', {
+              position: { bottom: -8, left: 0 },
+              html: detailHtml,
+            });
+          }
+        } catch {
+          // Element may not support markers/overlays
+        }
+      }
+    },
+
+    /**
+     * Remove all comparison highlights and overlays.
+     */
+    clearComparisonHighlights() {
+      const drdViewer = viewer.getActiveViewer();
+      if (!drdViewer) return;
+
+      try {
+        const overlays = drdViewer.get('overlays');
+        const canvas = drdViewer.get('canvas');
+        const elementRegistry = drdViewer.get('elementRegistry');
+
+        overlays.remove({ type: 'comparison-badge' });
+        overlays.remove({ type: 'comparison-detail' });
+
+        elementRegistry.forEach((element) => {
+          try {
+            canvas.removeMarker(element.id, 'compare-added');
+            canvas.removeMarker(element.id, 'compare-removed');
+            canvas.removeMarker(element.id, 'compare-modified');
+            canvas.removeMarker(element.id, 'compare-unchanged');
+          } catch {
+            // Ignore
+          }
+        });
       } catch {
         // Viewer may not be in DRD mode
       }
