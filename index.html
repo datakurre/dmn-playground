@@ -16,12 +16,12 @@
   </head>
   <body>
     <div id="app">
-      <header id="header">
+      <header id="header" role="banner">
         <h1>DMN Playground</h1>
         <p>Operaton/Camunda 7 compatible DMN playground in the browser</p>
       </header>
 
-      <div id="toolbar">
+      <div id="toolbar" role="toolbar" aria-label="DMN actions">
         <button id="btn-new" title="Create a new blank DMN project">📄 New</button>
         <button id="btn-load" title="Load DMN file">📂 Load DMN</button>
         <button id="btn-sample" title="Load sample DMN">📋 Sample</button>
@@ -48,15 +48,20 @@
         <button id="btn-theme" title="Toggle dark/light theme">🌙 Dark</button>
       </div>
 
-      <div id="main">
+      <div id="main" role="main" aria-label="DMN workspace">
         <div id="viewer-panel">
           <div id="dmn-viewer"></div>
+          <div id="drd-zoom-controls" class="drd-zoom-controls hidden" role="toolbar" aria-label="DRD zoom controls">
+            <button id="btn-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button id="btn-zoom-reset" title="Fit diagram to screen" aria-label="Fit diagram to screen">⊡</button>
+            <button id="btn-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          </div>
           <div id="drop-zone" class="drop-zone">
             <p>Drop a DMN file here<br />or click <strong>Load DMN</strong></p>
           </div>
         </div>
 
-        <div id="side-panel">
+        <div id="side-panel" role="complementary" aria-label="Evaluation controls and results">
           <div id="input-panel">
             <h3>Input Data</h3>
             <form id="input-form">
@@ -81,8 +86,8 @@
 
           <div id="result-panel">
             <h3>Result</h3>
-            <pre id="result-output" class="result-empty">No results yet</pre>
-            <div id="drd-controls" class="drd-controls hidden">
+            <pre id="result-output" class="result-empty" aria-live="polite" aria-atomic="true" role="status">No results yet</pre>
+            <div id="drd-controls" class="drd-controls hidden" role="toolbar" aria-label="DRD view controls">
               <button id="btn-view-drd" title="Navigate to DRD overview">🔀 View DRD</button>
               <button id="btn-toggle-overlays" title="Show/hide evaluation overlays">
                 👁 Hide Overlays
@@ -92,8 +97,14 @@
           </div>
 
           <div id="trace-panel">
-            <h3>Evaluation Trace</h3>
-            <pre id="trace-output"></pre>
+            <div class="trace-header">
+              <h3>Evaluation Trace</h3>
+              <div class="trace-actions hidden" id="trace-actions">
+                <button id="btn-trace-json" title="Export trace as JSON">📋 JSON</button>
+                <button id="btn-trace-csv" title="Export trace as CSV">📋 CSV</button>
+              </div>
+            </div>
+            <pre id="trace-output" aria-live="polite" role="log"></pre>
           </div>
         </div>
       </div>

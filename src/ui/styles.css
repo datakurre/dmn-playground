@@ -267,6 +267,43 @@ body {
 
 /* ── Trace ───────────────────────────────────────────────────────── */
 
+.trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.trace-header h3 {
+  margin-bottom: 0;
+}
+
+.trace-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.trace-actions.hidden {
+  display: none;
+}
+
+.trace-actions button {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.trace-actions button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 #trace-output {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -429,6 +466,126 @@ td.matched-rule {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
+}
+
+/* ── DRD Zoom Controls ───────────────────────────────────────────── */
+
+.drd-zoom-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 10;
+}
+
+.drd-zoom-controls.hidden {
+  display: none;
+}
+
+.drd-zoom-controls button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.drd-zoom-controls button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.drd-zoom-controls button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── High Contrast Mode ──────────────────────────────────────────── */
+
+@media (forced-colors: active) {
+  .decision-order-badge {
+    border: 2px solid CanvasText;
+  }
+
+  .decision-result-overlay {
+    border: 2px solid CanvasText;
+  }
+
+  .decision-result-overlay.error {
+    border-color: LinkText;
+  }
+
+  .decision-error-detail {
+    border: 2px solid LinkText;
+  }
+}
+
+[data-high-contrast='true'] .decision-order-badge {
+  border: 2px solid #000;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+[data-high-contrast='true'] .decision-result-overlay {
+  border: 2px solid #000;
+  font-weight: 600;
+}
+
+[data-high-contrast='true'] .decision-result-overlay.error {
+  border-color: #b91c1c;
+  font-weight: 700;
+}
+
+[data-high-contrast='true'] .decision-result-overlay.override {
+  border-color: #92400e;
+  font-weight: 700;
+}
+
+[data-high-contrast='true'] .decision-error-detail {
+  border: 2px solid #b91c1c;
+  font-weight: 600;
+}
+
+[data-high-contrast='true'] .decision-evaluated .djs-outline {
+  stroke-width: 3px !important;
+}
+
+[data-high-contrast='true'] .decision-error .djs-outline {
+  stroke-width: 3px !important;
+}
+
+[data-high-contrast='true'] .decision-override .djs-outline {
+  stroke-width: 3px !important;
+}
+
+[data-high-contrast='true'][data-theme='dark'] .decision-order-badge {
+  border-color: #fff;
+}
+
+[data-high-contrast='true'][data-theme='dark'] .decision-result-overlay {
+  border-color: #fff;
+}
+
+/* ── Focus Visible (keyboard accessibility) ──────────────────────── */
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Override Fields ─────────────────────────────────────────────── */

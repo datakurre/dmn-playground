@@ -212,6 +212,8 @@ export function createViewer(container) {
           }
           orderHtml.textContent = String(i + 1);
           orderHtml.title = `Step ${i + 1}: ${entry.decisionName}`;
+          orderHtml.setAttribute('role', 'img');
+          orderHtml.setAttribute('aria-label', `Evaluation step ${i + 1}: ${entry.decisionName}`);
 
           overlays.add(decisionId, 'evaluation-order', {
             position: { top: -12, right: -12 },
@@ -230,6 +232,12 @@ export function createViewer(container) {
           else if (entry.type === 'literalExpression') overlayClass += ' literal';
 
           resultHtml.className = overlayClass;
+          resultHtml.setAttribute('role', 'button');
+          resultHtml.setAttribute('tabindex', '0');
+          resultHtml.setAttribute(
+            'aria-label',
+            `${entry.decisionName}: ${isError ? 'error' : isOverride ? 'overridden' : 'result'} — ${formatOverlayResult(entry.result)}`,
+          );
 
           // Build content
           const typeIcon = isOverride
@@ -274,6 +282,13 @@ export function createViewer(container) {
               e.stopPropagation();
               options.onDecisionClick(entry.decisionId, entry);
             });
+            resultHtml.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                options.onDecisionClick(entry.decisionId, entry);
+              }
+            });
           }
 
           overlays.add(decisionId, 'evaluation-result', {
@@ -287,6 +302,8 @@ export function createViewer(container) {
             errorHtml.className = 'decision-error-detail';
             errorHtml.textContent = entry.error;
             errorHtml.title = entry.error;
+            errorHtml.setAttribute('role', 'alert');
+            errorHtml.setAttribute('aria-label', `Error: ${entry.error}`);
 
             overlays.add(decisionId, 'evaluation-error', {
               position: { bottom: -28, left: 0 },
@@ -329,6 +346,54 @@ export function createViewer(container) {
         });
       } catch {
         // Viewer may not be in DRD mode
+      }
+    },
+
+    /**
+     * Zoom in on the DRD canvas.
+     *
+     * @param {number} [step=0.2] - Zoom increment
+     */
+    zoomIn(step = 0.2) {
+      try {
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return;
+        const canvas = drdViewer.get('canvas');
+        const current = canvas.zoom();
+        canvas.zoom(current + step, 'auto');
+      } catch {
+        // Not in DRD mode
+      }
+    },
+
+    /**
+     * Zoom out on the DRD canvas.
+     *
+     * @param {number} [step=0.2] - Zoom decrement
+     */
+    zoomOut(step = 0.2) {
+      try {
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return;
+        const canvas = drdViewer.get('canvas');
+        const current = canvas.zoom();
+        canvas.zoom(Math.max(0.1, current - step), 'auto');
+      } catch {
+        // Not in DRD mode
+      }
+    },
+
+    /**
+     * Fit the DRD diagram to the viewport.
+     */
+    zoomFit() {
+      try {
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return;
+        const canvas = drdViewer.get('canvas');
+        canvas.zoom('fit-viewport', 'auto');
+      } catch {
+        // Not in DRD mode
       }
     },
 

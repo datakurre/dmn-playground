@@ -34,6 +34,7 @@ import { buildInputForm, buildOverrideForm } from './InputForm.js';
 import { encodeState, decodeState } from './url-state.js';
 import { SAMPLE_DMN } from './sample-dmn.js';
 import { createBlankDmn } from './blank-dmn.js';
+import { traceToJson, traceToCSV, downloadFile } from './trace-export.js';
 
 // ── State ───────────────────────────────────────────────────────────
 
@@ -87,6 +88,13 @@ const btnViewDrd = document.getElementById('btn-view-drd');
 const btnToggleOverlays = document.getElementById('btn-toggle-overlays');
 const btnResetDrd = document.getElementById('btn-reset-drd');
 const drdControls = document.getElementById('drd-controls');
+const btnTraceJson = document.getElementById('btn-trace-json');
+const btnTraceCsv = document.getElementById('btn-trace-csv');
+const traceActions = document.getElementById('trace-actions');
+const btnZoomIn = document.getElementById('btn-zoom-in');
+const btnZoomOut = document.getElementById('btn-zoom-out');
+const btnZoomReset = document.getElementById('btn-zoom-reset');
+const drdZoomControls = document.getElementById('drd-zoom-controls');
 
 // ── Initialize Viewer ───────────────────────────────────────────────
 
@@ -365,6 +373,26 @@ btnResetDrd.addEventListener('click', () => {
   btnToggleOverlays.textContent = '👁 Hide Overlays';
 });
 
+// ── Trace Export ────────────────────────────────────────────────
+
+btnTraceJson.addEventListener('click', () => {
+  if (!lastTrace || lastTrace.length === 0) return;
+  const json = traceToJson(lastTrace, { decisionId: decisionSelect.value });
+  downloadFile(json, `trace-${decisionSelect.value}.json`, 'application/json');
+});
+
+btnTraceCsv.addEventListener('click', () => {
+  if (!lastTrace || lastTrace.length === 0) return;
+  const csv = traceToCSV(lastTrace);
+  downloadFile(csv, `trace-${decisionSelect.value}.csv`, 'text/csv');
+});
+
+// ── DRD Zoom Controls ───────────────────────────────────────────
+
+btnZoomIn.addEventListener('click', () => viewer.zoomIn());
+btnZoomOut.addEventListener('click', () => viewer.zoomOut());
+btnZoomReset.addEventListener('click', () => viewer.zoomFit());
+
 btnBatchRun.addEventListener('click', () => {
   const text = batchEditor.value.trim();
   if (!text) {
@@ -596,6 +624,13 @@ async function loadDmn(xml) {
     btnCompare.disabled = false;
     btnEditToggle.disabled = false;
     batchEditorPanel.classList.remove('hidden');
+
+    // Show DRD zoom controls if there's more than one decision (DRD view)
+    if (currentModel.decisions.size > 1) {
+      drdZoomControls.classList.remove('hidden');
+    } else {
+      drdZoomControls.classList.add('hidden');
+    }
 
     // Reset edit mode button state
     if (viewer.isEditMode()) {
@@ -942,8 +977,11 @@ function formatError(err) {
 function showTrace(trace) {
   if (!trace || trace.length === 0) {
     traceOutput.textContent = 'No trace available';
+    traceActions.classList.add('hidden');
     return;
   }
+
+  traceActions.classList.remove('hidden');
 
   const lines = [];
   let totalDuration = 0;

@@ -615,3 +615,138 @@ describe('Viewer edit mode', () => {
     expect(ctrl.getCurrentXml()).toBeNull();
   });
 });
+
+// ── ARIA accessibility ──────────────────────────────────────────────
+
+describe('ARIA accessibility', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('order badge has role=img and aria-label', async () => {
+    withDrdView();
+    await ctrl.highlightDecisions(makeTrace([{ decisionId: 'dec1', decisionName: 'My Decision' }]));
+
+    const orderCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-order');
+    const html = orderCalls[0][2].html;
+    expect(html.getAttribute('role')).toBe('img');
+    expect(html.getAttribute('aria-label')).toContain('step 1');
+    expect(html.getAttribute('aria-label')).toContain('My Decision');
+  });
+
+  it('result overlay has role=button and tabindex', async () => {
+    withDrdView();
+    await ctrl.highlightDecisions(makeTrace([{ decisionId: 'dec1' }]), {
+      onDecisionClick: vi.fn(),
+    });
+
+    const resultCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-result');
+    const html = resultCalls[0][2].html;
+    expect(html.getAttribute('role')).toBe('button');
+    expect(html.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('result overlay has descriptive aria-label', async () => {
+    withDrdView();
+    await ctrl.highlightDecisions(
+      makeTrace([{ decisionId: 'dec1', decisionName: 'Tax Rate', result: 0.15 }]),
+    );
+
+    const resultCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-result');
+    const html = resultCalls[0][2].html;
+    expect(html.getAttribute('aria-label')).toContain('Tax Rate');
+    expect(html.getAttribute('aria-label')).toContain('result');
+  });
+
+  it('error overlay has role=alert', async () => {
+    withDrdView();
+    await ctrl.highlightDecisions(makeTrace([{ decisionId: 'dec1', error: 'Something broke' }]));
+
+    const errorCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-error');
+    const html = errorCalls[0][2].html;
+    expect(html.getAttribute('role')).toBe('alert');
+    expect(html.getAttribute('aria-label')).toContain('Something broke');
+  });
+
+  it('result overlay responds to Enter key', async () => {
+    withDrdView();
+    const onClick = vi.fn();
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    await ctrl.highlightDecisions(trace, { onDecisionClick: onClick });
+
+    const resultCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-result');
+    const html = resultCalls[0][2].html;
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    html.dispatchEvent(event);
+    expect(onClick).toHaveBeenCalledWith('dec1', trace[0]);
+  });
+
+  it('result overlay responds to Space key', async () => {
+    withDrdView();
+    const onClick = vi.fn();
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    await ctrl.highlightDecisions(trace, { onDecisionClick: onClick });
+
+    const resultCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-result');
+    const html = resultCalls[0][2].html;
+    const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+    html.dispatchEvent(event);
+    expect(onClick).toHaveBeenCalledWith('dec1', trace[0]);
+  });
+});
+
+// ── Zoom controls ───────────────────────────────────────────────────
+
+describe('Zoom controls', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    mockCanvas.zoom = vi.fn().mockReturnValue(1.0);
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  it('zoomIn increases zoom level', () => {
+    ctrl.zoomIn();
+    expect(mockCanvas.zoom).toHaveBeenCalledWith(1.2, 'auto');
+  });
+
+  it('zoomIn accepts custom step', () => {
+    ctrl.zoomIn(0.5);
+    expect(mockCanvas.zoom).toHaveBeenCalledWith(1.5, 'auto');
+  });
+
+  it('zoomOut decreases zoom level', () => {
+    ctrl.zoomOut();
+    expect(mockCanvas.zoom).toHaveBeenCalledWith(0.8, 'auto');
+  });
+
+  it('zoomOut does not go below 0.1', () => {
+    mockCanvas.zoom.mockReturnValue(0.15);
+    ctrl.zoomOut(0.2);
+    expect(mockCanvas.zoom).toHaveBeenCalledWith(0.1, 'auto');
+  });
+
+  it('zoomFit calls zoom with fit-viewport', () => {
+    ctrl.zoomFit();
+    expect(mockCanvas.zoom).toHaveBeenCalledWith('fit-viewport', 'auto');
+  });
+
+  it('zoomIn handles no active viewer gracefully', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.zoomIn()).not.toThrow();
+  });
+
+  it('zoomOut handles no active viewer gracefully', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.zoomOut()).not.toThrow();
+  });
+
+  it('zoomFit handles no active viewer gracefully', () => {
+    mockInstance.getActiveViewer.mockReturnValue(null);
+    expect(() => ctrl.zoomFit()).not.toThrow();
+  });
+});
