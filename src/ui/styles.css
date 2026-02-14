@@ -576,6 +576,7 @@ td.matched-rule {
   gap: 6px;
   margin-top: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .drd-controls.hidden {
@@ -597,6 +598,51 @@ td.matched-rule {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
+}
+
+.drd-controls button.hidden {
+  display: none;
+}
+
+.drd-controls-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+/* ── Animation Controls ──────────────────────────────────────────── */
+
+.anim-speed-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.anim-speed-label.hidden {
+  display: none;
+}
+
+.anim-speed-label select {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.anim-step-indicator {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+}
+
+.anim-step-indicator.hidden {
+  display: none;
 }
 
 /* ── DRD Zoom Controls ───────────────────────────────────────────── */
@@ -1182,6 +1228,11 @@ textarea:focus-visible {
   .drd-controls button {
     min-height: 44px;
     padding: 8px 14px;
+  }
+
+  .anim-speed-label select {
+    min-height: 44px;
+    padding: 8px 10px;
   }
 
   .trace-actions button {

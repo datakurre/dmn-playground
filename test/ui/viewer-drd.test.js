@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Shared mock state (referenced by mock factories via closure) ────
 
@@ -852,5 +852,287 @@ describe('zoomToEvaluated', () => {
     expect(vb.y).toBe(40); // 100 - 60
     expect(vb.width).toBe(300); // (200 + 180 + 60) - 140
     expect(vb.height).toBe(200); // (100 + 80 + 60) - 40
+  });
+});
+
+// ── animateDecisions ────────────────────────────────────────────────
+
+describe('animateDecisions', () => {
+  let ctrl;
+
+  beforeEach(() => {
+    resetMocks();
+    vi.useFakeTimers();
+    ctrl = createViewer(document.createElement('div'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // --- Guard clauses ---
+
+  it('returns null for null trace', () => {
+    const result = ctrl.animateDecisions(null);
+    expect(result).toBeNull();
+  });
+
+  it('returns null for empty trace', () => {
+    const result = ctrl.animateDecisions([]);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when no DRD view exists', () => {
+    mockInstance.getViews.mockReturnValue([{ type: 'decisionTable', element: { id: 'dec1' } }]);
+    const result = ctrl.animateDecisions(makeTrace([{}]));
+    expect(result).toBeNull();
+  });
+
+  // --- Controller returned ---
+
+  it('returns an animation controller object', () => {
+    withDrdView();
+    const animCtrl = ctrl.animateDecisions(makeTrace([{ decisionId: 'dec1' }]));
+    expect(animCtrl).not.toBeNull();
+    expect(typeof animCtrl.play).toBe('function');
+    expect(typeof animCtrl.pause).toBe('function');
+    expect(typeof animCtrl.stepForward).toBe('function');
+    expect(typeof animCtrl.finish).toBe('function');
+    expect(typeof animCtrl.stop).toBe('function');
+    expect(typeof animCtrl.setSpeed).toBe('function');
+    expect(typeof animCtrl.getCurrentStep).toBe('function');
+    expect(typeof animCtrl.getTotalSteps).toBe('function');
+    expect(typeof animCtrl.isPlaying).toBe('function');
+  });
+
+  it('starts with step -1 and not playing', () => {
+    withDrdView();
+    const animCtrl = ctrl.animateDecisions(makeTrace([{ decisionId: 'dec1' }]));
+    expect(animCtrl.getCurrentStep()).toBe(-1);
+    expect(animCtrl.isPlaying()).toBe(false);
+  });
+
+  it('reports correct total steps', () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }, { decisionId: 'c' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    expect(animCtrl.getTotalSteps()).toBe(3);
+  });
+
+  // --- Play/pause ---
+
+  it('play sets isPlaying to true', async () => {
+    withDrdView();
+    const animCtrl = ctrl.animateDecisions(
+      makeTrace([{ decisionId: 'dec1' }, { decisionId: 'dec2' }]),
+    );
+    animCtrl.play();
+    // Allow setup promise to resolve
+    await vi.advanceTimersByTimeAsync(100);
+    expect(animCtrl.isPlaying()).toBe(true);
+  });
+
+  it('pause sets isPlaying to false', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(100);
+    animCtrl.pause();
+    expect(animCtrl.isPlaying()).toBe(false);
+  });
+
+  it('play reveals the first step immediately', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1' }, { decisionId: 'dec2' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.play();
+    // Wait for setup promise + first step
+    await vi.advanceTimersByTimeAsync(100);
+    expect(animCtrl.getCurrentStep()).toBe(0);
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'decision-evaluated');
+  });
+
+  it('advances to next step after speed interval', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }, { decisionId: 'c' }]);
+    const animCtrl = ctrl.animateDecisions(trace, { speed: 500 });
+    animCtrl.play();
+    // First step
+    await vi.advanceTimersByTimeAsync(100);
+    expect(animCtrl.getCurrentStep()).toBe(0);
+    // Wait for second step (500ms delay + 50ms setup)
+    await vi.advanceTimersByTimeAsync(600);
+    expect(animCtrl.getCurrentStep()).toBe(1);
+  });
+
+  // --- Step forward ---
+
+  it('stepForward reveals one step at a time', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    // Need to wait for setup
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(animCtrl.getCurrentStep()).toBe(0);
+    expect(animCtrl.isPlaying()).toBe(false);
+  });
+
+  it('stepForward pauses auto-play', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }, { decisionId: 'c' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(100);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(animCtrl.isPlaying()).toBe(false);
+  });
+
+  // --- Finish ---
+
+  it('finish reveals all remaining steps', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }, { decisionId: 'c' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.finish();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(animCtrl.getCurrentStep()).toBe(2);
+  });
+
+  // --- Stop ---
+
+  it('stop prevents further steps', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stop();
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(animCtrl.getCurrentStep()).toBe(-1);
+  });
+
+  // --- Speed control ---
+
+  it('setSpeed changes the animation interval', async () => {
+    withDrdView();
+    const animCtrl = ctrl.animateDecisions(makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }]));
+    animCtrl.setSpeed(200);
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(animCtrl.getCurrentStep()).toBe(0);
+    // With speed 200, should advance after ~200ms
+    await vi.advanceTimersByTimeAsync(300);
+    expect(animCtrl.getCurrentStep()).toBe(1);
+  });
+
+  // --- Callbacks ---
+
+  it('calls onStep callback for each step', async () => {
+    withDrdView();
+    const onStep = vi.fn();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }]);
+    const animCtrl = ctrl.animateDecisions(trace, { onStep, speed: 100 });
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(onStep).toHaveBeenCalledWith(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(onStep).toHaveBeenCalledWith(1);
+  });
+
+  it('calls onComplete when animation finishes', async () => {
+    withDrdView();
+    const onComplete = vi.fn();
+    const trace = makeTrace([{ decisionId: 'a' }]);
+    const animCtrl = ctrl.animateDecisions(trace, { onComplete, speed: 100 });
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  // --- Overlay content ---
+
+  it('adds correct markers for evaluated decisions during animation', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'decision-evaluated');
+  });
+
+  it('adds error marker for error entries during animation', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1', error: 'fail' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'decision-error');
+  });
+
+  it('adds override marker for override entries during animation', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1', type: 'override' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'decision-override');
+  });
+
+  it('dims all decisions initially', async () => {
+    withDrdView();
+    mockElementRegistry.forEach.mockImplementation((fn) => {
+      fn({ type: 'dmn:Decision', id: 'dec1' });
+      fn({ type: 'dmn:Decision', id: 'dec2' });
+    });
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec1', 'decision-not-evaluated');
+    expect(mockCanvas.addMarker).toHaveBeenCalledWith('dec2', 'decision-not-evaluated');
+  });
+
+  it('removes dim marker when revealing a step', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockCanvas.removeMarker).toHaveBeenCalledWith('dec1', 'decision-not-evaluated');
+  });
+
+  it('adds order badge overlay during animation', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    const orderCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-order');
+    expect(orderCalls).toHaveLength(1);
+    expect(orderCalls[0][2].html.textContent).toBe('1');
+  });
+
+  it('adds result overlay during animation', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'dec1' }]);
+    const animCtrl = ctrl.animateDecisions(trace);
+    animCtrl.stepForward();
+    await vi.advanceTimersByTimeAsync(100);
+    const resultCalls = mockOverlays.add.mock.calls.filter((c) => c[1] === 'evaluation-result');
+    expect(resultCalls).toHaveLength(1);
+  });
+
+  it('does not advance after stop', async () => {
+    withDrdView();
+    const trace = makeTrace([{ decisionId: 'a' }, { decisionId: 'b' }]);
+    const animCtrl = ctrl.animateDecisions(trace, { speed: 100 });
+    animCtrl.play();
+    await vi.advanceTimersByTimeAsync(50);
+    animCtrl.stop();
+    await vi.advanceTimersByTimeAsync(500);
+    // Should not have advanced beyond whatever was in-flight
+    expect(animCtrl.isPlaying()).toBe(false);
   });
 });

@@ -317,6 +317,314 @@ export function createViewer(container) {
     },
 
     /**
+     * Animate the evaluation flow step by step.
+     *
+     * Reveals overlays one decision at a time in evaluation order.
+     * Returns a controller with play/pause/step/stop/setSpeed methods.
+     *
+     * @param {import('../engine/evaluate.js').EvaluationTrace[]} trace - Evaluation trace entries
+     * @param {Object} [options]
+     * @param {Function} [options.onDecisionClick] - Callback when a decision overlay is clicked
+     * @param {Function} [options.onStep] - Callback when a step is revealed (receives step index)
+     * @param {Function} [options.onComplete] - Callback when animation finishes
+     * @param {number} [options.speed=1000] - Delay between steps in milliseconds
+     * @returns {Object|null} Animation controller or null if animation cannot start
+     */
+    animateDecisions(trace, options = {}) {
+      if (!trace || trace.length === 0) return null;
+
+      // Find the DRD view
+      const views = viewer.getViews();
+      const drdView = views.find((v) => v.type === 'drd');
+      if (!drdView) return null;
+
+      let currentStep = -1;
+      let speed = options.speed || 1000;
+      let timerId = null;
+      let playing = false;
+      let stopped = false;
+
+      // Pre-open DRD view and set up base state
+      const setupPromise = (async () => {
+        await viewer.open(drdView);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const drdViewer = viewer.getActiveViewer();
+        if (!drdViewer) return false;
+
+        const overlaysSvc = drdViewer.get('overlays');
+        const canvas = drdViewer.get('canvas');
+        const elementRegistry = drdViewer.get('elementRegistry');
+
+        // Clear previous highlights
+        ctrl.clearDecisionHighlights();
+
+        // Dim all decisions initially
+        const evaluatedIds = new Set(trace.map((e) => e.decisionId));
+        elementRegistry.forEach((element) => {
+          if (element.type === 'dmn:Decision') {
+            try {
+              canvas.addMarker(element.id, 'decision-not-evaluated');
+            } catch {
+              // Element may not support markers
+            }
+          }
+        });
+
+        return { overlaysSvc, canvas, elementRegistry, evaluatedIds };
+      })();
+
+      /**
+       * Reveal one step of the animation by adding its overlays.
+       */
+      async function revealStep(stepIndex) {
+        const ctx = await setupPromise;
+        if (!ctx || stopped) return;
+
+        const { overlaysSvc, canvas } = ctx;
+        const entry = trace[stepIndex];
+        const decisionId = entry.decisionId;
+
+        try {
+          // Remove dim marker, add status marker
+          try {
+            canvas.removeMarker(decisionId, 'decision-not-evaluated');
+          } catch {
+            // ignore
+          }
+
+          let markerClass;
+          if (entry.error) {
+            markerClass = 'decision-error';
+          } else if (entry.type === 'override') {
+            markerClass = 'decision-override';
+          } else {
+            markerClass = 'decision-evaluated';
+          }
+          canvas.addMarker(decisionId, markerClass);
+
+          // Add order badge
+          const orderHtml = document.createElement('div');
+          orderHtml.className = 'decision-order-badge';
+          if (entry.type === 'override') {
+            orderHtml.classList.add('override');
+          }
+          orderHtml.textContent = String(stepIndex + 1);
+          orderHtml.title = `Step ${stepIndex + 1}: ${entry.decisionName}`;
+          orderHtml.setAttribute('role', 'img');
+          orderHtml.setAttribute(
+            'aria-label',
+            `Evaluation step ${stepIndex + 1}: ${entry.decisionName}`,
+          );
+
+          overlaysSvc.add(decisionId, 'evaluation-order', {
+            position: { top: -12, right: -12 },
+            html: orderHtml,
+          });
+
+          // Add result overlay
+          const resultHtml = document.createElement('div');
+          const isError = !!entry.error;
+          const isOverride = entry.type === 'override';
+
+          let overlayClass = 'decision-result-overlay';
+          if (isError) overlayClass += ' error';
+          else if (isOverride) overlayClass += ' override';
+          else if (entry.type === 'literalExpression') overlayClass += ' literal';
+
+          resultHtml.className = overlayClass;
+          resultHtml.setAttribute('role', 'button');
+          resultHtml.setAttribute('tabindex', '0');
+          resultHtml.setAttribute(
+            'aria-label',
+            `${entry.decisionName}: ${isError ? 'error' : isOverride ? 'overridden' : 'result'} — ${formatOverlayResult(entry.result)}`,
+          );
+
+          const typeIcon = isOverride
+            ? '⚡'
+            : isError
+              ? '❌'
+              : entry.type === 'literalExpression'
+                ? '𝑓'
+                : '▦';
+          const resultText = formatOverlayResult(entry.result);
+          resultHtml.textContent = `${typeIcon} ${resultText}`;
+
+          if (entry.durationMs !== undefined) {
+            const durationSpan = document.createElement('span');
+            durationSpan.className = 'decision-duration';
+            durationSpan.textContent = ` ${entry.durationMs}ms`;
+            resultHtml.appendChild(durationSpan);
+          }
+
+          if (options.onDecisionClick) {
+            resultHtml.style.cursor = 'pointer';
+            resultHtml.addEventListener('click', (e) => {
+              e.stopPropagation();
+              options.onDecisionClick(entry.decisionId, entry);
+            });
+            resultHtml.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                options.onDecisionClick(entry.decisionId, entry);
+              }
+            });
+          }
+
+          overlaysSvc.add(decisionId, 'evaluation-result', {
+            position: { bottom: -8, left: 0 },
+            html: resultHtml,
+          });
+
+          if (isError) {
+            const errorHtml = document.createElement('div');
+            errorHtml.className = 'decision-error-detail';
+            errorHtml.textContent = entry.error;
+            errorHtml.title = entry.error;
+            errorHtml.setAttribute('role', 'alert');
+            errorHtml.setAttribute('aria-label', `Error: ${entry.error}`);
+
+            overlaysSvc.add(decisionId, 'evaluation-error', {
+              position: { bottom: -28, left: 0 },
+              html: errorHtml,
+            });
+          }
+        } catch {
+          // Element may not exist in the DRD — skip silently
+        }
+
+        currentStep = stepIndex;
+        if (options.onStep) {
+          options.onStep(stepIndex);
+        }
+      }
+
+      function scheduleNext() {
+        if (stopped || !playing) return;
+        if (currentStep >= trace.length - 1) {
+          playing = false;
+          if (options.onComplete) {
+            options.onComplete();
+          }
+          return;
+        }
+        timerId = setTimeout(() => {
+          if (stopped || !playing) return;
+          revealStep(currentStep + 1).then(scheduleNext);
+        }, speed);
+      }
+
+      const animCtrl = {
+        /**
+         * Start or resume automatic playback.
+         */
+        play() {
+          if (stopped) return;
+          if (playing) return;
+          playing = true;
+          // If we haven't started yet, reveal the first step immediately
+          if (currentStep < 0) {
+            revealStep(0).then(scheduleNext);
+          } else {
+            scheduleNext();
+          }
+        },
+
+        /**
+         * Pause automatic playback.
+         */
+        pause() {
+          playing = false;
+          if (timerId !== null) {
+            clearTimeout(timerId);
+            timerId = null;
+          }
+        },
+
+        /**
+         * Advance one step forward.
+         */
+        stepForward() {
+          if (stopped) return;
+          animCtrl.pause();
+          const next = currentStep + 1;
+          if (next < trace.length) {
+            revealStep(next);
+          }
+        },
+
+        /**
+         * Stop the animation and show all remaining overlays.
+         */
+        finish() {
+          animCtrl.pause();
+          // Reveal all remaining steps synchronously
+          const start = currentStep + 1;
+          const reveal = async () => {
+            for (let i = start; i < trace.length; i++) {
+              await revealStep(i);
+            }
+            if (options.onComplete) {
+              options.onComplete();
+            }
+          };
+          reveal();
+        },
+
+        /**
+         * Stop the animation completely and clean up.
+         */
+        stop() {
+          stopped = true;
+          playing = false;
+          if (timerId !== null) {
+            clearTimeout(timerId);
+            timerId = null;
+          }
+        },
+
+        /**
+         * Set the animation speed.
+         *
+         * @param {number} ms - Delay between steps in milliseconds
+         */
+        setSpeed(ms) {
+          speed = ms;
+        },
+
+        /**
+         * Get the current step index (-1 if not started).
+         *
+         * @returns {number}
+         */
+        getCurrentStep() {
+          return currentStep;
+        },
+
+        /**
+         * Get the total number of steps.
+         *
+         * @returns {number}
+         */
+        getTotalSteps() {
+          return trace.length;
+        },
+
+        /**
+         * Whether the animation is currently playing.
+         *
+         * @returns {boolean}
+         */
+        isPlaying() {
+          return playing;
+        },
+      };
+
+      return animCtrl;
+    },
+
+    /**
      * Remove all decision evaluation highlights and overlays.
      */
     clearDecisionHighlights() {

@@ -116,6 +116,7 @@ let getInputValues = () => ({});
 let getOverrideValues = () => ({});
 let lastTrace = null;
 let drdOverlaysVisible = true;
+let animationController = null;
 
 // ── DOM References ──────────────────────────────────────────────────
 
@@ -167,6 +168,15 @@ const btnZoomOut = document.getElementById('btn-zoom-out');
 const btnZoomReset = document.getElementById('btn-zoom-reset');
 const btnZoomEvaluated = document.getElementById('btn-zoom-evaluated');
 const drdZoomControls = document.getElementById('drd-zoom-controls');
+
+// Animation controls
+const btnAnimPlay = document.getElementById('btn-anim-play');
+const btnAnimPause = document.getElementById('btn-anim-pause');
+const btnAnimStep = document.getElementById('btn-anim-step');
+const btnAnimFinish = document.getElementById('btn-anim-finish');
+const animSpeedSelect = document.getElementById('anim-speed-select');
+const animSpeedLabel = document.getElementById('anim-speed-label');
+const animStepIndicator = document.getElementById('anim-step-indicator');
 
 // ── Initialize Viewer ───────────────────────────────────────────────
 
@@ -440,6 +450,7 @@ btnToggleOverlays.addEventListener('click', async () => {
 });
 
 btnResetDrd.addEventListener('click', () => {
+  stopAnimation();
   viewer.clearDecisionHighlights();
   viewer.clearHighlights();
   lastTrace = null;
@@ -447,6 +458,141 @@ btnResetDrd.addEventListener('click', () => {
   drdControls.classList.add('hidden');
   btnToggleOverlays.textContent = '👁 Hide Overlays';
   btnZoomEvaluated.classList.add('hidden');
+});
+
+// ── Animation Controls ──────────────────────────────────────────
+
+/**
+ * Stop any running animation and hide animation controls.
+ */
+function stopAnimation() {
+  if (animationController) {
+    animationController.stop();
+    animationController = null;
+  }
+  hideAnimationControls();
+}
+
+/**
+ * Show animation controls for multi-decision evaluation.
+ */
+function showAnimationControls() {
+  btnAnimPlay.classList.remove('hidden');
+  animSpeedLabel.classList.remove('hidden');
+}
+
+/**
+ * Hide all animation controls and reset state.
+ */
+function hideAnimationControls() {
+  btnAnimPlay.classList.add('hidden');
+  btnAnimPause.classList.add('hidden');
+  btnAnimStep.classList.add('hidden');
+  btnAnimFinish.classList.add('hidden');
+  animSpeedLabel.classList.add('hidden');
+  animStepIndicator.classList.add('hidden');
+  animStepIndicator.textContent = '';
+}
+
+/**
+ * Update the step indicator text.
+ */
+function updateStepIndicator(step, total) {
+  animStepIndicator.textContent = `${step + 1}/${total}`;
+  animStepIndicator.classList.remove('hidden');
+}
+
+/**
+ * Switch to "playing" button state.
+ */
+function setAnimPlaying() {
+  btnAnimPlay.classList.add('hidden');
+  btnAnimPause.classList.remove('hidden');
+  btnAnimStep.classList.remove('hidden');
+  btnAnimFinish.classList.remove('hidden');
+}
+
+/**
+ * Switch to "paused" button state.
+ */
+function setAnimPaused() {
+  btnAnimPlay.classList.remove('hidden');
+  btnAnimPause.classList.add('hidden');
+  btnAnimStep.classList.remove('hidden');
+  btnAnimFinish.classList.remove('hidden');
+}
+
+/**
+ * Switch to "complete" button state.
+ */
+function setAnimComplete() {
+  btnAnimPlay.classList.add('hidden');
+  btnAnimPause.classList.add('hidden');
+  btnAnimStep.classList.add('hidden');
+  btnAnimFinish.classList.add('hidden');
+}
+
+btnAnimPlay.addEventListener('click', () => {
+  if (!lastTrace || lastTrace.length <= 1) return;
+
+  if (animationController && !animationController.isPlaying()) {
+    // Resume existing animation
+    animationController.play();
+    setAnimPlaying();
+    return;
+  }
+
+  // Start new animation
+  stopAnimation();
+  viewer.clearDecisionHighlights();
+
+  animationController = viewer.animateDecisions(lastTrace, {
+    onDecisionClick: handleDrdDecisionClick,
+    speed: Number(animSpeedSelect.value),
+    onStep(step) {
+      updateStepIndicator(step, lastTrace.length);
+      // Scroll trace table to current step
+      const entry = lastTrace[step];
+      if (entry) {
+        scrollTraceToDecision(entry.decisionId);
+      }
+    },
+    onComplete() {
+      setAnimComplete();
+    },
+  });
+
+  if (animationController) {
+    animationController.play();
+    setAnimPlaying();
+  }
+});
+
+btnAnimPause.addEventListener('click', () => {
+  if (animationController) {
+    animationController.pause();
+    setAnimPaused();
+  }
+});
+
+btnAnimStep.addEventListener('click', () => {
+  if (animationController) {
+    animationController.stepForward();
+    setAnimPaused();
+  }
+});
+
+btnAnimFinish.addEventListener('click', () => {
+  if (animationController) {
+    animationController.finish();
+    setAnimComplete();
+  }
+});
+
+animSpeedSelect.addEventListener('change', () => {
+  if (animationController) {
+    animationController.setSpeed(Number(animSpeedSelect.value));
+  }
 });
 
 // ── Trace Export ────────────────────────────────────────────────
@@ -675,6 +821,7 @@ decisionSelect.addEventListener('change', () => {
     getOverrideValues = buildOverrideForm(overrideForm, currentModel, decisionId);
     viewer.clearHighlights();
     viewer.clearDecisionHighlights();
+    stopAnimation();
     lastTrace = null;
     drdControls.classList.add('hidden');
     resultOutput.textContent = 'No results yet';
@@ -834,15 +981,20 @@ async function runEvaluation() {
         btnToggleOverlays.textContent = '👁 Hide Overlays';
         // Show zoom-to-evaluated button
         btnZoomEvaluated.classList.remove('hidden');
+        // Show animation controls
+        stopAnimation();
+        showAnimationControls();
       } else if (
         lastTraceEntry.type === 'decisionTable' &&
         lastTraceEntry.matchedRules.length > 0
       ) {
         viewer.highlightRules(lastTraceEntry.decisionId, lastTraceEntry.matchedRules);
         drdControls.classList.add('hidden');
+        stopAnimation();
       } else {
         viewer.clearHighlights();
         drdControls.classList.add('hidden');
+        stopAnimation();
       }
     }
   } catch (err) {

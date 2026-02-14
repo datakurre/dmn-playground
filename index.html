@@ -97,6 +97,21 @@
                 👁 Hide Overlays
               </button>
               <button id="btn-reset-drd" title="Clear all DRD highlights">🔄 Reset</button>
+              <span class="drd-controls-divider"></span>
+              <button id="btn-anim-play" title="Play evaluation animation step by step" class="hidden">▶ Animate</button>
+              <button id="btn-anim-pause" title="Pause animation" class="hidden">⏸ Pause</button>
+              <button id="btn-anim-step" title="Step to next decision" class="hidden">⏭ Step</button>
+              <button id="btn-anim-finish" title="Show all remaining steps" class="hidden">⏩ Finish</button>
+              <label class="anim-speed-label hidden" id="anim-speed-label" title="Animation speed">
+                Speed:
+                <select id="anim-speed-select" aria-label="Animation speed">
+                  <option value="2000">Slow</option>
+                  <option value="1000" selected>Normal</option>
+                  <option value="500">Fast</option>
+                  <option value="200">Very Fast</option>
+                </select>
+              </label>
+              <span id="anim-step-indicator" class="anim-step-indicator hidden" aria-live="polite"></span>
             </div>
           </div>
 
