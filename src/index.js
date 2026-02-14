@@ -28,6 +28,10 @@ export { resolveEvaluationOrder, getDependencies } from './engine/drg.js';
 export { applyHitPolicy } from './engine/hit-policy.js';
 export { coerceValue } from './engine/types.js';
 
+// UI utilities
+export { createBlankDmn } from './ui/blank-dmn.js';
+export { formatOverlayResult } from './ui/format.js';
+
 // FEEL providers
 export { FeelProvider } from './engine/feel/provider.js';
 export { FeelinProvider } from './engine/feel/feelin.js';

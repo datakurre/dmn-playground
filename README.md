@@ -132,8 +132,9 @@ dmn-playground/
 │   │   └── parse.js      # Uses dmn-moddle
 │   ├── ui/               # Browser UI components
 │   │   ├── App.js        # Main application
-│   │   ├── Viewer.js     # dmn-js integration
+│   │   ├── Viewer.js     # dmn-js integration & DRD simulation
 │   │   ├── InputForm.js  # Dynamic input form
+│   │   ├── blank-dmn.js  # Blank DMN template for new projects
 │   │   └── url-state.js  # URL encoding/decoding
 │   └── index.js          # Entry point & public API
 ├── test/                 # Vitest test suites
@@ -141,6 +142,61 @@ dmn-playground/
 ├── public/               # Static assets & PWA manifest
 └── .github/workflows/    # CI & deployment
 ```
+
+## DRD Simulation
+
+When evaluating decisions that form a Decision Requirements Graph (DRG), the
+playground provides a rich visual simulation on top of the DRD diagram.
+
+### Evaluation Overlays
+
+After evaluating a decision with dependencies, the DRD view shows:
+
+- **Order badges** — numbered circles on each decision indicating evaluation order
+- **Result overlays** — compact result preview below each decision node
+- **Status markers** — green (evaluated), red (error), or purple (what-if override)
+- **Dimmed decisions** — decisions not participating in the evaluation are dimmed
+
+### Interactive Navigation
+
+- **Click** a decision overlay in the DRD to navigate to its decision table and
+  see the highlighted matched rules
+- Use **View DRD** button to return to the DRD overview with overlays
+- **Toggle Overlays** to show/hide evaluation indicators
+- **Reset** clears all highlights and evaluation state
+
+### DRD Controls
+
+The DRD controls toolbar appears after evaluating a multi-decision graph:
+
+| Control | Action |
+|---|---|
+| 🔀 View DRD | Navigate to DRD view with evaluation overlays |
+| 👁 Hide/Show Overlays | Toggle visibility of evaluation indicators |
+| 🔄 Reset | Clear all DRD highlights and evaluation state |
+
+### API
+
+The DRD simulation is powered by functions on the viewer controller:
+
+- **`highlightDecisions(trace, options)`** — Render evaluation overlays on the
+  DRD. Accepts an array of `EvaluationTrace` entries and an optional
+  `onDecisionClick` callback for interactive navigation.
+- **`clearDecisionHighlights()`** — Remove all evaluation overlays and markers.
+- **`navigateToDecision(decisionId)`** — Open a specific decision's table or
+  literal expression view.
+- **`navigateToDrd()`** — Navigate back to the DRD overview.
+- **`formatOverlayResult(value)`** — Format a result value for compact overlay
+  display (truncates long values).
+
+### Creating New DMN Projects
+
+Click the **📄 New** button in the toolbar to create a blank DMN project with:
+
+- A single decision table with UNIQUE hit policy
+- One input and one output column
+- A wildcard rule that matches any input
+- The editor automatically opens in edit mode
 
 ## Core Libraries
 

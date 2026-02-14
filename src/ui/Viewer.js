@@ -21,6 +21,7 @@
 
 import DmnViewer from 'dmn-js/lib/Viewer.js';
 import DmnModeler from 'dmn-js/lib/Modeler.js';
+import { formatOverlayResult } from './format.js';
 
 // Import dmn-js CSS
 import 'dmn-js/dist/assets/diagram-js.css';
@@ -448,18 +449,4 @@ export function createViewer(container) {
   return ctrl;
 }
 
-/**
- * Format a result value for compact overlay display.
- *
- * @param {*} value
- * @returns {string}
- */
-function formatOverlayResult(value) {
-  if (value === null || value === undefined) return '∅';
-  if (typeof value === 'object') {
-    const json = JSON.stringify(value);
-    return json.length > 30 ? json.slice(0, 27) + '...' : json;
-  }
-  const str = String(value);
-  return str.length > 30 ? str.slice(0, 27) + '...' : str;
-}
+export { formatOverlayResult };

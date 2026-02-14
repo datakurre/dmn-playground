@@ -33,6 +33,7 @@ import { createViewer } from './Viewer.js';
 import { buildInputForm, buildOverrideForm } from './InputForm.js';
 import { encodeState, decodeState } from './url-state.js';
 import { SAMPLE_DMN } from './sample-dmn.js';
+import { createBlankDmn } from './blank-dmn.js';
 
 // ── State ───────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ let drdOverlaysVisible = true;
 
 const viewerPanel = document.getElementById('dmn-viewer');
 const dropZone = document.getElementById('drop-zone');
+const btnNew = document.getElementById('btn-new');
 const btnLoad = document.getElementById('btn-load');
 const btnSample = document.getElementById('btn-sample');
 const btnEvaluate = document.getElementById('btn-evaluate');
@@ -185,6 +187,15 @@ fileInput.addEventListener('change', async (e) => {
     await loadDmn(xml);
   }
   fileInput.value = '';
+});
+
+btnNew.addEventListener('click', async () => {
+  const xml = createBlankDmn();
+  await loadDmn(xml);
+  // Automatically enter edit mode for new projects
+  await viewer.setEditMode(true);
+  btnEditToggle.textContent = '👁 View';
+  btnEditToggle.title = 'Switch to view mode';
 });
 
 btnSample.addEventListener('click', () => loadDmn(SAMPLE_DMN));
